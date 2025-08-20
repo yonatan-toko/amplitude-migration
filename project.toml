@@ -1,0 +1,13 @@
+[project]
+name = "amplitude-migrator"
+version = "0.1.0"
+description = "Amplitude project-to-project event migration with MTU estimate and reports"
+requires-python = ">=3.9"
+dependencies = ["requests"]
+
+[project.scripts]
+amp-migrate = "amplitude_migrator.cli:main"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"

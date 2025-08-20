@@ -1,0 +1,149 @@
+import json, os, time
+from typing import Dict, Any, Iterable, List, Optional, Set
+from . import core
+
+def _iter_source_events(cfg) -> Iterable[Dict[str, Any]]:
+    if cfg.get("LOCAL_EXPORT_GZ_PATH"):
+        if cfg.get("VERBOSE"): print(f"[source] local gz: {cfg['LOCAL_EXPORT_GZ_PATH']}")
+        yield from core.iterate_ndjson_from_gz_path(cfg["LOCAL_EXPORT_GZ_PATH"])
+        return
+    if not (cfg.get("EXPORT_START") and cfg.get("EXPORT_END")):
+        raise SystemExit("Set LOCAL_EXPORT_GZ_PATH or both EXPORT_START and EXPORT_END in config.")
+    if cfg.get("VERBOSE"):
+        print(f"[export] {cfg['SOURCE_REGION']} {cfg['EXPORT_START']} → {cfg['EXPORT_END']}")
+    gz = core.stream_export_from_api(
+        cfg["SOURCE_PROJECT_API_KEY"], cfg["SOURCE_PROJECT_SECRET_KEY"],
+        cfg["SOURCE_REGION"], cfg["EXPORT_START"], cfg["EXPORT_END"]
+    )
+    if cfg.get("VERBOSE"): print(f"[export] bytes={len(gz):,}")
+    yield from core.iterate_ndjson_from_gz_bytes(gz)
+
+def _mtu_sets_add(user_ids: Set[str], device_ids: Set[str], evt: Dict[str, Any], exclude_null: bool):
+    u = evt.get("user_id")
+    d = evt.get("device_id")
+    if u and (not exclude_null or u != "null"): user_ids.add(str(u))
+    if d and (not exclude_null or d != "null"): device_ids.add(str(d))
+
+def _mtu_estimate(user_ids: Set[str], device_ids: Set[str], strategy: str) -> int:
+    s = (strategy or "union").lower()
+    if s == "user_id":   return len(user_ids)
+    if s == "device_id": return len(device_ids)
+    return len(user_ids.union(device_ids))  # union default
+
+def run_migration(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    started_at = time.time()
+    total_in = total_kept = total_sent = 0
+    unique_user_ids, unique_device_ids = set(), set()
+    buf: List[Dict[str, Any]] = []
+    batches: List[int] = []
+
+    for evt in _iter_source_events(cfg):
+        total_in += 1
+        new_evt = core.transform_event(
+            evt,
+            allow=cfg.get("EVENT_ALLOWLIST", []),
+            deny=cfg.get("EVENT_DENYLIST", []),
+            rename_map=cfg.get("EVENT_RENAME_MAP", {}),
+            keep_map=cfg.get("EVENT_PROPERTY_KEEP", {"*": ["*"]}),
+            prop_rename_map=cfg.get("EVENT_PROP_RENAME_MAP", {}),
+            time_strategy=cfg.get("TIME_STRATEGY", "prefer_client_fallback_server_received"),
+            original_times_as_properties=cfg.get("ORIGINAL_TIMES_AS_PROPERTIES", True),
+            force_user_id=cfg.get("FORCE_USER_ID"),
+            force_device_id=cfg.get("FORCE_DEVICE_ID"),
+        )
+        if new_evt is None:
+            continue
+        total_kept += 1
+
+        # MTU tracking (estimate)
+        _mtu_sets_add(unique_user_ids, unique_device_ids, new_evt, cfg.get("EXCLUDE_NULL_IDS_IN_MTU", True))
+
+        if cfg.get("DRY_RUN", False):
+            if cfg.get("VERBOSE", False) and total_kept <= 3:
+                print("[preview]", json.dumps(new_evt, ensure_ascii=False))
+            continue
+
+        buf.append(new_evt)
+        if len(buf) >= int(cfg.get("BATCH_SIZE", 500)):
+            core.send_batch(buf, cfg["DEST_PROJECT_API_KEY"], cfg["DEST_REGION"],
+                            timeout=int(cfg.get("REQUEST_TIMEOUTS", 30)),
+                            max_retries=int(cfg.get("MAX_RETRIES", 5)),
+                            backoff=float(cfg.get("RETRY_BACKOFF_S", 1.5)),
+                            verbose=bool(cfg.get("VERBOSE", True)))
+            total_sent += len(buf)
+            batches.append(len(buf))
+            if cfg.get("VERBOSE", True):
+                print(f"[ingest] sent {len(buf)} (total {total_sent})")
+            buf = []
+
+    if not cfg.get("DRY_RUN", False) and buf:
+        core.send_batch(buf, cfg["DEST_PROJECT_API_KEY"], cfg["DEST_REGION"],
+                        timeout=int(cfg.get("REQUEST_TIMEOUTS", 30)),
+                        max_retries=int(cfg.get("MAX_RETRIES", 5)),
+                        backoff=float(cfg.get("RETRY_BACKOFF_S", 1.5)),
+                        verbose=bool(cfg.get("VERBOSE", True)))
+        total_sent += len(buf)
+        batches.append(len(buf))
+        if cfg.get("VERBOSE", True):
+            print(f"[ingest] sent {len(buf)} (total {total_sent})")
+
+    ended_at = time.time()
+
+    mtu_strategy = cfg.get("MTU_COUNT_STRATEGY", "union")
+    mtu_rate = float(cfg.get("MTU_BILLING_RATE_USD", 0.0))
+    mtu = _mtu_estimate(unique_user_ids, unique_device_ids, mtu_strategy)
+    est_cost = round(mtu * mtu_rate, 4)
+
+    summary = {
+        "started_at": started_at,
+        "ended_at": ended_at,
+        "duration_s": round(ended_at - started_at, 3),
+        "source": {
+            "region": cfg.get("SOURCE_REGION"),
+            "export_start": cfg.get("EXPORT_START"),
+            "export_end": cfg.get("EXPORT_END"),
+            "local_export_path": cfg.get("LOCAL_EXPORT_GZ_PATH"),
+        },
+        "destination": {
+            "region": cfg.get("DEST_REGION"),
+        },
+        "counters": {
+            "events_read": total_in,
+            "events_kept": total_kept,
+            "events_sent": total_sent,
+            "batches": batches,
+        },
+        "mtu": {
+            "unique_user_ids": len(unique_user_ids),
+            "unique_device_ids": len(unique_device_ids),
+            "strategy": mtu_strategy,
+            "rate_usd": mtu_rate,
+            "estimate": mtu,
+            "estimated_cost_usd": est_cost,
+        },
+        "settings": {
+            "dry_run": bool(cfg.get("DRY_RUN", False)),
+            "batch_size": int(cfg.get("BATCH_SIZE", 500)),
+            "time_strategy": cfg.get("TIME_STRATEGY", "prefer_client_fallback_server_received"),
+            "original_times_as_properties": bool(cfg.get("ORIGINAL_TIMES_AS_PROPERTIES", True)),
+            "allowlist": cfg.get("EVENT_ALLOWLIST", []),
+            "denylist": cfg.get("EVENT_DENYLIST", []),
+        },
+    }
+
+    # Save JSON report
+    reports_dir = cfg.get("REPORTS_DIR", "migration_runs")
+    os.makedirs(reports_dir, exist_ok=True)
+    name = time.strftime("run-%Y%m%d-%H%M%S.json", time.gmtime(ended_at))
+    path = os.path.join(reports_dir, name)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(summary, f, ensure_ascii=False, indent=2)
+
+    # Final console line
+    print(
+        f"Done. read={total_in} kept={total_kept} sent={total_sent} "
+        f"mtu≈{mtu} estimated_cost≈${est_cost} "
+        f"(strategy={mtu_strategy}, rate=${mtu_rate}/MTU)"
+    )
+
+    return summary

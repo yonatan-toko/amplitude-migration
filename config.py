@@ -107,6 +107,16 @@ RETRY_BACKOFF_S  = 1.5     # exponential
 
 
 
+# ---- MTU & cost --------------------------------------------------------
+# MTU = Monthly Tracked Users
+MTU_BILLING_RATE_USD = 0.00         # e.g., 0.0001 for $0.0001 per user
+MTU_COUNT_STRATEGY = "union"         # "user_id" | "device_id" | "union"
+EXCLUDE_NULL_IDS_IN_MTU = True       # True = ignore events with null user_id/device_id in MTU count
+
+
+
+
 # ---- Safety --------------------------------------------------------------------
 DRY_RUN = True   # True = transform and count only; do NOT send to destination
 VERBOSE = True    # print progress
+REPORTS_DIR = "migration-runs"
