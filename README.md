@@ -18,9 +18,8 @@ Migrate selected events from one Amplitude project to another with filtering, sa
 
 ## 2) Install (no Git required)
 
-### Option A — from PyPI (recommended)
 ```bash
-pip install amplitude-migrator
+pip3 install "git+https://github.com/yonatan-toko/amplitude-migration.git@main#egg=amplitude-migrator"
 ```
 
 This installs the CLI command **`amp-migrate`**.
