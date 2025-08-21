@@ -1,11 +1,12 @@
 import os
-import json
+import json , socket
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 import uvicorn
+
 
 # Where this file lives (inside the installed package)
 BASE_DIR = Path(__file__).resolve().parent
@@ -72,8 +73,44 @@ def get_run(report_id: str):
     return JSONResponse(data)
 
 # -------- Entrypoint used by CLI --------
-def start_ui(host: str = "127.0.0.1", port: int = 8000, reload: bool = False):
+def _find_open_port(host: str, preferred: int, tries: int = 20) -> int:
     """
-    Launch the packaged UI. Called by `amp-migrate ui`.
+    Return `preferred` if free, otherwise the next available port within `tries`.
+    Raises RuntimeError if none found.
     """
-    uvicorn.run("amplitude_migrator.web.app:app", host=host, port=port, reload=reload)
+    candidates = [preferred] + list(range(preferred + 1, preferred + tries + 1))
+    for p in candidates:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                s.bind((host, p))
+                return p  # it's free
+            except OSError:
+                continue
+    raise RuntimeError(f"No free port found near {preferred}")
+
+def start_ui(host: str = "127.0.0.1", port: int = 8000, reload: bool = False, auto_port: bool = True):
+    """
+    Launch the packaged UI. If auto_port=True and `port` is taken, it will try
+    subsequent ports (8010, 8011, …) until it finds a free one.
+    """
+    chosen_port = port
+    if auto_port:
+        # Prefer a jump to 8010 first to avoid clashing with common 8000 backends
+        base = 8010 if port == 8000 else port
+        try:
+            chosen_port = _find_open_port(host, base, tries=30)
+        except RuntimeError:
+            # final fallback: just try the originally requested port (may still raise)
+            chosen_port = port
+
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    print("Amplitude Migrator UI")
+    if host == "0.0.0.0":
+        print(f"▶ Local:    http://127.0.0.1:{chosen_port}")
+        print(f"▶ Network:  http://{host}:{chosen_port}")
+    else:
+        print(f"▶ URL:      http://{host}:{chosen_port}")
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    uvicorn.run("amplitude_migrator.web.app:app", host=host, port=chosen_port, reload=reload)
