@@ -40,6 +40,9 @@ def run_migration(cfg: Dict[str, Any]) -> Dict[str, Any]:
     buf: List[Dict[str, Any]] = []
     batches: List[int] = []
 
+    sample_limit = int(cfg.get("REPORT_SAMPLE_LIMIT", 20))
+    sample_events: List[Dict[str, Any]] = []
+
     # --- Optional ID remapping config ---
     user_map_path = cfg.get("USER_ID_REMAP_PATH") or cfg.get("ID_REMAP_PATH")
     device_map_path = cfg.get("DEVICE_ID_REMAP_PATH")
@@ -87,6 +90,14 @@ def run_migration(cfg: Dict[str, Any]) -> Dict[str, Any]:
                 # dropped due to unmapped policy
                 continue
 
+        # Capture sample events for UI (store up to sample_limit)
+        if len(sample_events) < sample_limit:
+            try:
+                # store a shallow copy to avoid later mutation
+                sample_events.append(json.loads(json.dumps(new_evt)))
+            except Exception:
+                pass
+
         total_kept += 1
 
         # MTU tracking (estimate)
@@ -128,6 +139,16 @@ def run_migration(cfg: Dict[str, Any]) -> Dict[str, Any]:
     mtu = _mtu_estimate(unique_user_ids, unique_device_ids, mtu_strategy)
     est_cost = round(mtu * mtu_rate, 4)
 
+    # Prefer env var, then config, then canonical default
+    reports_dir_path = Path(
+        os.getenv("MIGRATION_REPORTS_DIR")
+        or cfg.get("REPORTS_DIR")
+        or "migration_runs"
+    ).resolve()
+    reports_dir_path.mkdir(parents=True, exist_ok=True)
+    name = time.strftime("run-%Y%m%d-%H%M%S.json", time.gmtime(ended_at))
+    path = str(reports_dir_path / name)
+
     summary = {
         "started_at": started_at,
         "ended_at": ended_at,
@@ -165,6 +186,11 @@ def run_migration(cfg: Dict[str, Any]) -> Dict[str, Any]:
             "preserve_original_ids": preserve_original_ids,
             "unmapped_policy": unmapped_policy,
         },
+        "samples": {
+            "limit": sample_limit,
+            "count": len(sample_events),
+            "events": sample_events,
+        },
         "settings": {
             "dry_run": bool(cfg.get("DRY_RUN", False)),
             "batch_size": int(cfg.get("BATCH_SIZE", 500)),
@@ -176,10 +202,6 @@ def run_migration(cfg: Dict[str, Any]) -> Dict[str, Any]:
     }
 
     # Save JSON report
-    reports_dir = cfg.get("REPORTS_DIR", "migration_runs")
-    os.makedirs(reports_dir, exist_ok=True)
-    name = time.strftime("run-%Y%m%d-%H%M%S.json", time.gmtime(ended_at))
-    path = os.path.join(reports_dir, name)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
 

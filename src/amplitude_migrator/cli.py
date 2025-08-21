@@ -52,25 +52,25 @@ EVENT_DENYLIST = [
 
 
 # ---- Property controls (keep/rename) ---------------------------------------------------
-# Keep properties per event type. Use "*" to mean "all events" or a list
-# Keep properties per event. Use "*" to mean "all properties" or a list of keys to keep.
-# You can also define a "*" event key as a default for all events.
+# Keep properties per event type. Use "*" for all events and "*" inside the list for all properties.
+# Example keeps:
+#   EVENT_PROPERTY_KEEP = {
+#       "*": ["*"],                      # keep all properties for all events (default)
+#       # "visit_submitted": ["doctorName", "visitDate"],
+#       # "purchase": ["price", "sku"]
+#   }
 EVENT_PROPERTY_KEEP = {
     "*": ["*"],  # keep all by default
-    # "event type": ["proprty 1", "property 2", "propert 3", "property 4"],
-    # "event type": ["property 1"],
 }
 
 # Optionally rename event types (e.g., to new naming conventions)
-# Example: "visit_submitted": "visit_created"
+# Example: {"visit_submitted": "visit_created"}
 EVENT_RENAME_MAP = {
-    # "event type": "different_event_name",
 }
 
 # Optionally rename event property keys per event
 # Example: {"visit_submitted": {"doctor": "doctorName"}}
 EVENT_PROP_RENAME_MAP = {
-    # "event type": {"property": "new_property_name"},
 }
 
 
@@ -132,16 +132,16 @@ REPORTS_DIR = "migration_runs"
 DEFAULT_README = """\
 # Amplitude Project-to-Project Migrator
 
-This tool lets you **transfer Amplitude events from one project to another**.  
-You can:
+This tool lets you **transfer Amplitude events from one project to another**.
 
-- Select which **event types** to migrate  
-- **Keep or rename** event properties  
-- **Rename events** if needed  
-- Select the way **Time** is handled
-- Preserve or override **user_id / device_id**  
-- Send to **US or EU** regions  
-- Run safely in **dry-run** mode before sending anything  
+You can:
+- Select which **event types** to migrate
+- **Keep or rename** event properties
+- **Rename events** if needed
+- Choose how **time** is handled and preserve originals
+- Preserve or override **user_id / device_id**
+- Send to **US or EU** regions
+- Run safely in **dry-run** mode before sending anything
 
 Works with either:
 - a **local Amplitude export file** (`.json.gz`), or
@@ -149,81 +149,92 @@ Works with either:
 
 ---
 
-## 1. Setup
+## 1) Setup
 
 ### Prerequisites
 - Python **3.9+**
 - Install dependencies:
-  ```bash
-  pip3 install requests
+
+```bash
+pip3 install requests
+```
 
 ---
 
-## 2. Confugure
+## 2) Configure
 
-### open config.py and fill the fields as commented.
+Open `config.py` and fill the fields as commented.
 
-### importent notes:
-- Set either LOCAL_EXPORT_GZ_PATH **xor** (EXPORT_START **and** EXPORT_END).
-- Region must match the project’s data center (US/EU) for both source and destination.
-
-### Very importent (!!!):
-- I made a second README file called **TIME-HANDLING**, that explains how to operate the time segments in the configuration. It's pretty long, sorry about that ^_^
+> Notes
+> - Set either `LOCAL_EXPORT_GZ_PATH` **xor** (`EXPORT_START` **and** `EXPORT_END`).
+> - Region must match the project’s data center (US/EU) for both source and destination.
+> - See `TIME-HANDLING.md` for details on timestamp strategies.
 
 ---
 
-## 3. Dry run - preview
+## 3) Dry run — preview
 
-- set **DRY_RUN = TRUE**
-- ```bash
-    python3 migrate.py --dry-run
+Set `DRY_RUN = True` in `config.py`, then run:
 
-### importent notes:
-- Reads events (from local gz or Export API),
-- Applies filters/renames,
-- Prints a few transformed samples,
-- Does **not** send to destination.
+```bash
+amp-migrate run --config amplitude_migration_project/config.py --dry-run
+```
+
+This will:
+- Read events (from local gz or Export API)
+- Apply filters/renames
+- Print a few transformed samples
+- **Not** send anything to the destination
 
 ---
 
-## 4. Run foreal
+## 4) Real run
 
-- set **DRY_RUN = False**
-- ```bash
-    python3 migrate.py
+Set `DRY_RUN = False` in `config.py`, then run:
 
-### notes:
-- Streams or loads events,
-- Transforms according to config.py,
-- Batches and sends to destination via Amplitude Batch API,
-- Retries on transient errors.
+```bash
+amp-migrate run --config amplitude_migration_project/config.py
+```
 
-### The progress will be shown in the terminal like this:
+You should see progress like:
+```
 [source] reading local gz: exports/2025-08-14.json.gz
-[ingest] sent 500 (total 500) → {'code': 200, 'events_ingested': 500, ...}
+[ingest] sent 500 (total 500) → {"code": 200, "events_ingested": 500, ...}
 ...
 Done. read=14237 kept=13990 sent=13990 dry_run=False
+```
 
 ---
 
-### How it works:
+## 5) UI — view reports and sample events
 
-### 1. Read:
-- If LOCAL_EXPORT_GZ_PATH set → read gzipped NDJSON directly.
-- Else → call Export API (start/end hour window) and stream results.
-### 2. Transform
-- Drop events by denylist; if allowlist set, keep only those.
-- Rename event types (optional).
-- Filter/rename properties per event (or * default).
-- Preserve time, user_id/device_id (or override).
-- Forward user_properties / groups if present.
-### 3. Ingest
-- Batch up to BATCH_SIZE.
-- POST to Batch API for destination region (US/EU).
-- Retry on 408/429/5xx with exponential backoff.
-### 4. Report
-- Print counts: read, kept, sent.
-- In dry-run, only preview a few transformed events.
+Launch the dashboard:
+
+```bash
+amp-migrate ui --port 8010
+```
+
+Open the printed URL and click a run to view:
+- Summary & MTU (with estimated cost)
+- ID Remap settings (if used)
+- **Samples → Events** — full JSON of captured events (properties & values)
+
+If your run reports are in a different folder, start with:
+```bash
+amp-migrate ui --reports-dir /path/to/migration_runs
+```
+
+---
+
+## 6) User ID remap (optional)
+
+Create a CSV `id_map.csv` with headers `old_id,new_id` and point to it in `config.py`:
+```python
+USER_ID_REMAP_PATH = "id_map.csv"
+REMAP_SCOPE = "user_id"  # or "both"
+```
+Run a dry run first, then a real run.
+
 """
 
 DEFAULT_TIME = """\
@@ -233,50 +244,37 @@ This migration tool preserves **event time semantics** so your destination proje
 
 ---
 
-## 1. Amplitude Timestamps
+## 1) Amplitude Timestamps
 
-When you export from Amplitude, each event can include multiple timestamps:
-
-- **time** --> the original client event time (ms since epoch). This is what the SDK usually sends.  
-- **server_received_time** --> when Amplitude’s servers first received the event.  
-- **server_upload_time** --> when Amplitude ingested/stored the event.  
-
----
-
-## 2. The Challenge
-
-Amplitude’s ingestion API only accepts a single `time` field (client time).  
-You **cannot set** Amplitude’s internal server-received/upload timestamps directly.  
-But you may want to **preserve them** for analysis after migration.
+From Amplitude exports, events may include:
+- **time** — the original client event time (ms since epoch)
+- **server_received_time** — when Amplitude received the event
+- **server_upload_time** — when Amplitude ingested/stored the event
 
 ---
 
-## 3. Our Strategy
+## 2) The Challenge
 
-I introduced a config option `TIME_STRATEGY` in `config.py`:
-
-- `"client"`  
-  Always use original client time if present, else `now()`.
-
-- `"server_received"`  
-  Use `server_received_time` if present, else fallback to client, else `now()`.
-
-- `"server_upload"`  
-  Use `server_upload_time` if present, else fallback to client, else `now()`.
-
-- `"prefer_client_fallback_server_received"` (default)  
-  Prefer client time, fallback to server received.
-
-- `"prefer_client_fallback_server_upload"`  
-  Prefer client time, fallback to server upload.
-
-In all cases, if nothing is available, the tool falls back to the current time.
+Amplitude’s ingestion API only accepts a single `time` field. You **cannot set** Amplitude’s internal server times directly. But you may want to **preserve them** for analysis after migration.
 
 ---
 
-## 4. Preserving Originals
+## 3) Strategy
 
-With `ORIGINAL_TIMES_AS_PROPERTIES = True` in `config.py`, the migration will attach an extra `_migration` property block to each event:
+Set `TIME_STRATEGY` in `config.py`:
+- `"client"` — always use original client time if present, else `now()`
+- `"server_received"` — use server_received_time, fallback to client, else `now()`
+- `"server_upload"` — use server_upload_time, fallback to client, else `now()`
+- `"prefer_client_fallback_server_received"` (default) — prefer client time, fallback to server received
+- `"prefer_client_fallback_server_upload"` — prefer client time, fallback to server upload
+
+If nothing is available, we fallback to the current time.
+
+---
+
+## 4) Preserve originals
+
+With `ORIGINAL_TIMES_AS_PROPERTIES = True`, the migration will attach an extra `_migration` block:
 
 ```
 "_migration": {
@@ -287,22 +285,11 @@ With `ORIGINAL_TIMES_AS_PROPERTIES = True` in `config.py`, the migration will at
 }
 ```
 
-This way, even if Amplitude’s system only recognizes one `time`, you can still analyze the original server times later.
-
 ---
 
-## Why This Matters
-
-- **Analysis accuracy**: If the source project relied on server timestamps, you can still query them in the destination via `_migration.*`.  
-- **Debugging**: Lets you verify delays between client vs. server receipt.  
-- **Flexibility**: You can rerun migration with a different `TIME_STRATEGY` without losing access to originals.  
-
----
-
-## My Opinion:
-- Use `"prefer_client_fallback_server_received"` as default.  
-- Keep `ORIGINAL_TIMES_AS_PROPERTIES = True` unless you are sure you don’t need them.  
-- For charting ease, you can flatten `_migration.orig_*` into top-level properties if desired.
+## Recommendations
+- Keep `ORIGINAL_TIMES_AS_PROPERTIES = True` unless you’re sure you don’t need them.
+- Default `TIME_STRATEGY = "prefer_client_fallback_server_received"` works well for most cases.
 """
 
 # Utility -------------------------------------------
@@ -330,10 +317,16 @@ def cmd_init(args: argparse.Namespace):
     print("Next step: edit config.py with your details.")
     print("   Then run:")
     print("   amp-migrate run --config amplitude_migration_project/config.py --dry-run")
+    print("   UI: amp-migrate ui --port 8010  # then open the printed URL")
 
 def cmd_run(args: argparse.Namespace):
     cfg = _load_config_module(Path(args.config).resolve())
     settings = cfg.__dict__.copy()
+
+    # Allow overriding reports directory for this run
+    if getattr(args, "reports_dir", None):
+        os.environ["MIGRATION_REPORTS_DIR"] = str(Path(args.reports_dir).expanduser().resolve())
+
     if args.dry_run:
         settings["DRY_RUN"] = True
     summary = run_migration(settings)
@@ -360,6 +353,7 @@ def cli():
     sp = sub.add_parser("run", help="Run migration")
     sp.add_argument("--config", required=True, help="Path to config.py")
     sp.add_argument("--dry-run", action="store_true", help="Force dry run")
+    sp.add_argument("--reports-dir", help="Override reports directory for this run")
     sp.set_defaults(fn=cmd_run)
 
     sp = sub.add_parser("ui", help="Launch web dashboard")
