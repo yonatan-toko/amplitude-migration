@@ -1,8 +1,8 @@
+from __future__ import annotations
 import base64, gzip, io, json, os, random, time
 from typing import Dict, Any, Iterable, List, Optional, Tuple, Set
 import requests
 from .time_utils import choose_time_ms, parse_iso_to_ms
-from __future__ import annotations
 import csv
 from pathlib import Path
 from typing import Dict, Iterable, Literal, Optional
