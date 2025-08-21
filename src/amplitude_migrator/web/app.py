@@ -47,8 +47,6 @@ app.add_middleware(
     allow_methods=["*"], allow_headers=["*"],
 )
 
-# Serve static assets from the installed package
-app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
 
 # -------- Helpers --------
 def _list_reports():
@@ -98,6 +96,9 @@ def get_run_by_name(name: str):
     with path.open("r", encoding="utf-8") as f:
         data = json.load(f)
     return JSONResponse(data)
+
+# Mount static last so API routes take precedence
+app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
 
 # -------- Entrypoint used by CLI --------
 def _find_open_port(host: str, preferred: int, tries: int = 20) -> int:
