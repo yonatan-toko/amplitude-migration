@@ -339,8 +339,13 @@ def cmd_run(args: argparse.Namespace):
     summary = run_migration(settings)
     print(summary.get("final_line", "Done."))
 
-def cmd_ui(args: argparse.Namespace):
-    os.environ["MIGRATION_REPORTS_DIR"] = args.reports_dir or os.getcwd()
+def cmd_ui(args):
+    from pathlib import Path
+    # If the user supplied --reports-dir, use it. Otherwise default to <CWD>/migration_runs
+    default_reports = Path.cwd() / "migration_runs"
+    reports_dir = Path(args.reports_dir).expanduser() if args.reports_dir else default_reports
+    os.environ["MIGRATION_REPORTS_DIR"] = str(reports_dir.resolve())
+
     from amplitude_migrator.web.app import start_ui
     start_ui(host=args.host, port=args.port, reload=False)
 
