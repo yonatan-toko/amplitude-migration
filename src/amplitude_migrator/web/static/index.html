@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Amplitude Migrator — Runs</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header class="container">
+    <h1>Amplitude Migrator — Runs</h1>
+    <p class="muted">
+      This dashboard reads JSON reports from <code>migration_runs/</code>.
+      Run migrations with <code>amp-migrate</code> and refresh this page.
+    </p>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <div class="card-header">
+        <h2>Run History</h2>
+        <button id="refreshBtn" class="btn">Refresh</button>
+      </div>
+      <div class="table-wrapper">
+        <table id="runsTable">
+          <thead>
+            <tr>
+              <th>Report</th>
+              <th>Started</th>
+              <th>Duration (s)</th>
+              <th>Read</th>
+              <th>Kept</th>
+              <th>Sent</th>
+              <th>MTU</th>
+              <th>Est. Cost</th>
+              <th>Mode</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="runsBody">
+            <tr><td colspan="10" class="muted">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="detailCard" class="card hidden">
+      <div class="card-header">
+        <h2 id="detailTitle">Details</h2>
+        <button id="closeDetailBtn" class="btn btn-ghost">Close</button>
+      </div>
+      <pre id="detailJson" class="json"></pre>
+    </section>
+  </main>
+
+  <footer class="container muted">
+    <small>UI served by <code>amp-migrate ui</code></small>
+  </footer>
+
+  <script src="/static/script.js"></script>
+</body>
+</html>

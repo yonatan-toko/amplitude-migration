@@ -1,13 +1,28 @@
 [project]
 name = "amplitude-migrator"
 version = "0.1.0"
-description = "Amplitude project-to-project event migration with MTU estimate and reports"
+description = "Amplitude project-to-project event migration with MTU estimate, time strategies, and reports"
+readme = "README.md"
 requires-python = ">=3.9"
 dependencies = ["requests"]
+authors = [{ name = "Your Team" }]
 
+# CLI: users can run `amp-migrate`
 [project.scripts]
 amp-migrate = "amplitude_migrator.cli:main"
 
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
+
+# Tell setuptools to only package code under src/
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["amplitude_migrator*"]
+exclude = ["web*", "tests*", "migration_runs*"]
+
+[tool.setuptools.package-data]
+amplitude_migrator = ["web/static/*"]

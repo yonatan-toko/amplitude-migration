@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.env
+.mypy_cache/
+.migration_cache/
+migration_runs/
