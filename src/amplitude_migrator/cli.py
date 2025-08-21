@@ -126,7 +126,7 @@ EXCLUDE_NULL_IDS_IN_MTU = True       # True = ignore events with null user_id/de
 # ---- Safety --------------------------------------------------------------------
 DRY_RUN = True   # True = transform and count only; do NOT send to destination
 VERBOSE = True    # print progress
-REPORTS_DIR = "migration-runs"
+REPORTS_DIR = "migration_runs"
 """
 
 DEFAULT_README = """\
