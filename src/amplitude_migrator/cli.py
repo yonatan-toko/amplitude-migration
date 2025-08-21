@@ -13,6 +13,9 @@ DEFAULT_CONFIG = """\
 
 
 # ---- Source (for Export API or local gz file) ----------------------------------------
+from platform import node
+
+
 SOURCE_PROJECT_API_KEY    = "SRC_PROJECT_API_KEY"    # used for Export API
 SOURCE_PROJECT_SECRET_KEY = "SRC_PROJECT_SECRET_KEY" # used for Export API
 SOURCE_REGION             = "US"  # or "EU"
@@ -52,25 +55,25 @@ EVENT_DENYLIST = [
 
 
 # ---- Property controls (keep/rename) ---------------------------------------------------
-# Keep properties per event type. Use "*" for all events and "*" inside the list for all properties.
-# Example keeps:
-#   EVENT_PROPERTY_KEEP = {
-#       "*": ["*"],                      # keep all properties for all events (default)
-#       # "visit_submitted": ["doctorName", "visitDate"],
-#       # "purchase": ["price", "sku"]
-#   }
+# Keep properties per event type. Use "*" to mean "all events" or a list
+# Keep properties per event. Use "*" to mean "all properties" or a list of keys to keep.
+# You can also define a "*" event key as a default for all events.
 EVENT_PROPERTY_KEEP = {
     "*": ["*"],  # keep all by default
+    # "event type": ["proprty 1", "property 2", "propert 3", "property 4"],
+    # "event type": ["property 1"],
 }
 
 # Optionally rename event types (e.g., to new naming conventions)
-# Example: {"visit_submitted": "visit_created"}
+# Example: "visit_submitted": "visit_created"
 EVENT_RENAME_MAP = {
+    # "event type": "different_event_name",
 }
 
 # Optionally rename event property keys per event
 # Example: {"visit_submitted": {"doctor": "doctorName"}}
 EVENT_PROP_RENAME_MAP = {
+    # "event type": {"property": "new_property_name"},
 }
 
 
@@ -101,6 +104,16 @@ ORIGINAL_TIMES_AS_PROPERTIES = True
 # Keep "user_id" and/or "device_id" as-is. If you need to overwrite, set these:
 FORCE_USER_ID   = None  # e.g., "migrated-user" (usually keep None)
 FORCE_DEVICE_ID = None  # e.g., "migration-device"
+
+
+
+
+# ---- User identity handling ------------------------------------------------------
+USER_ID_REMAP_PATH = "path/to/user_id_remap.csv"  # e.g., "user_id_remap.csv"
+DEVICE_ID_REMAP_PATH = None  # e.g., "device_id_remap.csv"
+REMAP_SCOPE = "user_id"  # "user_id" or "device_id" or "both"
+PRESERVE_ORIGINALS_IDS = True  # True = keep original user_id/device_id in event_properties under "_migration" key
+UNMAPPED_USER_ID = "keep"  # "keep" | "drop"
 
 
 
