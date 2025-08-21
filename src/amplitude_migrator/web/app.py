@@ -1,5 +1,5 @@
 import os
-import json , socket
+import json, socket
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,9 +12,31 @@ import uvicorn
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 
-# Where migration run reports are written by the CLI/library
-# (defaults to ./migration_runs relative to the current working dir)
-REPORTS_DIR = Path(os.getenv("MIGRATION_REPORTS_DIR", "migration_runs")).resolve()
+# Where migration run reports are written by the CLI/library.
+# Global convention: use ./migration_runs (underscore). Users can override with MIGRATION_REPORTS_DIR.
+
+def _get_reports_dir() -> Path:
+    env_dir = os.getenv("MIGRATION_REPORTS_DIR")
+    if env_dir:
+        p = Path(env_dir).expanduser().resolve()
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    # Canonical default
+    underscore = Path("migration_runs").resolve()
+    if underscore.exists():
+        return underscore
+
+    # Backward-compat: accept legacy hyphenated folder if it exists
+    hyphen = Path("migration-runs").resolve()
+    if hyphen.exists():
+        return hyphen
+
+    # If nothing exists, create the canonical folder
+    underscore.mkdir(parents=True, exist_ok=True)
+    return underscore
+
+REPORTS_DIR = _get_reports_dir()
 
 app = FastAPI(title="Amplitude Migrator UI", version="1.0")
 
