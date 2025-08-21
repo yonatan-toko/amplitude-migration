@@ -140,11 +140,8 @@ def run_migration(cfg: Dict[str, Any]) -> Dict[str, Any]:
     est_cost = round(mtu * mtu_rate, 4)
 
     # Prefer env var, then config, then canonical default
-    reports_dir_path = Path(
-        os.getenv("MIGRATION_REPORTS_DIR")
-        or cfg.get("REPORTS_DIR")
-        or "migration_runs"
-    ).resolve()
+    reports_dir_path = Path("migration_runs").resolve()
+
     name = time.strftime("run-%Y%m%d-%H%M%S.json", time.gmtime(ended_at))
     path = str(reports_dir_path / name)
     if cfg.get("VERBOSE", True):
