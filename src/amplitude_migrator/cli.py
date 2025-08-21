@@ -299,7 +299,11 @@ def _write_if_missing(path: Path, content: str):
         path.write_text(content, encoding="utf-8")
 
 def _load_config_module(cfg_path: Path):
+    if not cfg_path.exists():
+        raise FileNotFoundError(f"Config not found: {cfg_path}")
     spec = importlib.util.spec_from_file_location("cfg", str(cfg_path))
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Failed to load spec for: {cfg_path}")
     mod = importlib.util.module_from_spec(spec)  # type: ignore
     spec.loader.exec_module(mod)                 # type: ignore
     return mod
@@ -333,11 +337,11 @@ def cmd_run(args: argparse.Namespace):
     print(summary.get("final_line", "Done."))
 
 def cmd_ui(args):
-    from pathlib import Path
     # If the user supplied --reports-dir, use it. Otherwise default to <CWD>/migration_runs
     default_reports = Path.cwd() / "migration_runs"
     reports_dir = Path(args.reports_dir).expanduser() if args.reports_dir else default_reports
     os.environ["MIGRATION_REPORTS_DIR"] = str(reports_dir.resolve())
+    print(f"[ui] reports dir: {Path(os.environ['MIGRATION_REPORTS_DIR']).resolve()}")
 
     from amplitude_migrator.web.app import start_ui
     start_ui(host=args.host, port=args.port, reload=False)
@@ -345,7 +349,7 @@ def cmd_ui(args):
 # CLI parser ----------------------------------------
 def cli():
     p = argparse.ArgumentParser(prog="amp-migrate")
-    sub = p.add_subparsers(dest="cmd")
+    sub = p.add_subparsers(dest="cmd", required=True)
 
     sp = sub.add_parser("init", help="Create workspace (config.py, README.md, TIME-HANDLING.md)")
     sp.set_defaults(fn=cmd_init)
@@ -363,9 +367,7 @@ def cli():
     sp.set_defaults(fn=cmd_ui)
 
     args = p.parse_args()
-    if hasattr(args, "fn"):
-        return args.fn(args)
-    p.print_help()
+    return args.fn(args)
 
 if __name__ == "__main__":
     cli()
