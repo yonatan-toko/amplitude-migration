@@ -48,7 +48,7 @@ app.add_middleware(
 )
 
 # Serve static assets from the installed package
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
 
 # -------- Helpers --------
 def _list_reports():
@@ -77,10 +77,6 @@ def _list_reports():
     return out
 
 # -------- Routes --------
-@app.get("/")
-def index():
-    return FileResponse(STATIC_DIR / "index.html")
-
 @app.get("/api/migration/runs")
 def list_runs():
     return {"runs": _list_reports()}
@@ -88,6 +84,15 @@ def list_runs():
 @app.get("/api/migration/runs/{report_id}")
 def get_run(report_id: str):
     path = REPORTS_DIR / report_id
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Report not found")
+    with path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    return JSONResponse(data)
+
+@app.get("/api/migration/run/{name}")
+def get_run_by_name(name: str):
+    path = REPORTS_DIR / name
     if not path.exists():
         raise HTTPException(status_code=404, detail="Report not found")
     with path.open("r", encoding="utf-8") as f:
@@ -133,6 +138,7 @@ def start_ui(host: str = "127.0.0.1", port: int = 8000, reload: bool = False, au
         print(f"▶ Network:  http://{host}:{chosen_port}")
     else:
         print(f"▶ URL:      http://{host}:{chosen_port}")
+    print("Reports dir:", REPORTS_DIR)
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
     uvicorn.run("amplitude_migrator.web.app:app", host=host, port=chosen_port, reload=reload)

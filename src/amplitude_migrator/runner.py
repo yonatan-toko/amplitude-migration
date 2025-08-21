@@ -1,6 +1,9 @@
 import json, os, time
 from typing import Dict, Any, Iterable, List, Optional, Set
 from . import core
+from pathlib import Path
+from typing import Optional, Dict
+from amplitude_migrator.core import load_id_map, apply_id_remap
 
 def _iter_source_events(cfg) -> Iterable[Dict[str, Any]]:
     if cfg.get("LOCAL_EXPORT_GZ_PATH"):
@@ -37,6 +40,21 @@ def run_migration(cfg: Dict[str, Any]) -> Dict[str, Any]:
     buf: List[Dict[str, Any]] = []
     batches: List[int] = []
 
+    # --- Optional ID remapping config ---
+    user_map_path = cfg.get("USER_ID_REMAP_PATH") or cfg.get("ID_REMAP_PATH")
+    device_map_path = cfg.get("DEVICE_ID_REMAP_PATH")
+    remap_scope = cfg.get("REMAP_SCOPE", "user_id")  # "user_id" | "device_id" | "both"
+    preserve_original_ids = bool(cfg.get("PRESERVE_ORIGINAL_IDS", True))
+    unmapped_policy = cfg.get("UNMAPPED_ID_POLICY", "keep")  # "keep" | "drop"
+
+    user_map = load_id_map(user_map_path) if user_map_path else None
+    device_map = (
+        load_id_map(device_map_path) if device_map_path else
+        (user_map if (user_map and remap_scope in ("device_id", "both")) else None)
+    )
+
+    remap_counters: Dict[str, int] = {}
+
     for evt in _iter_source_events(cfg):
         total_in += 1
         new_evt = core.transform_event(
@@ -53,6 +71,22 @@ def run_migration(cfg: Dict[str, Any]) -> Dict[str, Any]:
         )
         if new_evt is None:
             continue
+
+        # Apply optional ID remapping before counting/preview/sending
+        if user_map or device_map:
+            new_evt = apply_id_remap(
+                new_evt,
+                user_map=user_map,
+                device_map=device_map,
+                scope=remap_scope,  # type: ignore[arg-type]
+                preserve_original_ids=preserve_original_ids,
+                unmapped_policy=unmapped_policy,  # type: ignore[arg-type]
+                counters=remap_counters,
+            )
+            if new_evt is None:
+                # dropped due to unmapped policy
+                continue
+
         total_kept += 1
 
         # MTU tracking (estimate)
@@ -107,12 +141,14 @@ def run_migration(cfg: Dict[str, Any]) -> Dict[str, Any]:
         "destination": {
             "region": cfg.get("DEST_REGION"),
         },
-        "counters": {
+        "counters": (
+            lambda base: (base.update(remap_counters) or base)
+        )({
             "events_read": total_in,
             "events_kept": total_kept,
             "events_sent": total_sent,
             "batches": batches,
-        },
+        }),
         "mtu": {
             "unique_user_ids": len(unique_user_ids),
             "unique_device_ids": len(unique_device_ids),
@@ -120,6 +156,14 @@ def run_migration(cfg: Dict[str, Any]) -> Dict[str, Any]:
             "rate_usd": mtu_rate,
             "estimate": mtu,
             "estimated_cost_usd": est_cost,
+        },
+        "id_remap": {
+            "enabled": bool(user_map or device_map),
+            "user_map_path": str(Path(user_map_path).resolve()) if user_map_path else None,
+            "device_map_path": str(Path(device_map_path).resolve()) if device_map_path else None,
+            "scope": remap_scope,
+            "preserve_original_ids": preserve_original_ids,
+            "unmapped_policy": unmapped_policy,
         },
         "settings": {
             "dry_run": bool(cfg.get("DRY_RUN", False)),

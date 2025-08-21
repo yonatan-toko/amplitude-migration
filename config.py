@@ -6,6 +6,9 @@
 
 
 # ---- Source (for Export API or local gz file) ----------------------------------------
+from platform import node
+
+
 SOURCE_PROJECT_API_KEY    = "SRC_PROJECT_API_KEY"    # used for Export API
 SOURCE_PROJECT_SECRET_KEY = "SRC_PROJECT_SECRET_KEY" # used for Export API
 SOURCE_REGION             = "US"  # or "EU"
@@ -94,6 +97,16 @@ ORIGINAL_TIMES_AS_PROPERTIES = True
 # Keep "user_id" and/or "device_id" as-is. If you need to overwrite, set these:
 FORCE_USER_ID   = None  # e.g., "migrated-user" (usually keep None)
 FORCE_DEVICE_ID = None  # e.g., "migration-device"
+
+
+
+
+# ---- User identity handling ------------------------------------------------------
+USER_ID_REMAP_PATH = "path/to/user_id_remap.csv"  # e.g., "user_id_remap.csv"
+DEVICE_ID_REMAP_PATH = None  # e.g., "device_id_remap.csv"
+REMAP_SCOPE = "user_id"  # "user_id" or "device_id" or "both"
+PRESERVE_ORIGINALS_IDS = True  # True = keep original user_id/device_id in event_properties under "_migration" key
+UNMAPPED_USER_ID = "keep"  # "keep" | "drop"
 
 
 

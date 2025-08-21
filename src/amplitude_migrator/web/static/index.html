@@ -4,59 +4,71 @@
   <meta charset="utf-8" />
   <title>Amplitude Migrator — Runs</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link rel="stylesheet" href="/static/styles.css" />
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; background: #f8fafc; color: #111; }
+    header, footer { padding: 1rem 2rem; background: #fff; border-bottom: 1px solid #eee; }
+    h1 { margin: 0; font-size: 1.5rem; }
+    main { display: flex; height: calc(100vh - 120px); }
+    .panel { flex: 1; overflow: auto; padding: 1rem; }
+    .runs { border-right: 1px solid #ddd; }
+    table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+    th, td { border-bottom: 1px solid #eee; padding: 0.5rem; text-align: left; }
+    th { background: #f1f5f9; position: sticky; top: 0; }
+    tr:hover { background: #f9fafb; cursor: pointer; }
+    .json { white-space: pre-wrap; font-family: monospace; background: #f9fafb; padding: 1rem; border-radius: 8px; }
+    .muted { color: #555; }
+    .btn { padding: 0.3rem 0.6rem; background: #2563eb; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-ghost { background: transparent; color: #2563eb; border: 1px solid #2563eb; }
+  </style>
 </head>
 <body>
-  <header class="container">
+  <header>
     <h1>Amplitude Migrator — Runs</h1>
     <p class="muted">
-      This dashboard reads JSON reports from <code>migration_runs/</code>.
-      Run migrations with <code>amp-migrate</code> and refresh this page.
+      This dashboard reads JSON reports from <code>migration_runs/</code>. Run migrations with <code>amp-migrate</code> and refresh this page.
     </p>
   </header>
 
-  <main class="container">
-    <section class="card">
-      <div class="card-header">
+  <main>
+    <section class="panel runs">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: .5rem">
         <h2>Run History</h2>
         <button id="refreshBtn" class="btn">Refresh</button>
       </div>
-      <div class="table-wrapper">
-        <table id="runsTable">
-          <thead>
-            <tr>
-              <th>Report</th>
-              <th>Started</th>
-              <th>Duration (s)</th>
-              <th>Read</th>
-              <th>Kept</th>
-              <th>Sent</th>
-              <th>MTU</th>
-              <th>Est. Cost</th>
-              <th>Mode</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="runsBody">
-            <tr><td colspan="10" class="muted">Loading…</td></tr>
-          </tbody>
-        </table>
-      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Report</th>
+            <th>Started</th>
+            <th>Duration (s)</th>
+            <th>Read</th>
+            <th>Kept</th>
+            <th>Sent</th>
+            <th>MTU</th>
+            <th>Est. Cost</th>
+            <th>Mode</th>
+          </tr>
+        </thead>
+        <tbody id="runsBody">
+          <tr><td colspan="9" class="muted">Loading…</td></tr>
+        </tbody>
+      </table>
     </section>
 
-    <section id="detailCard" class="card hidden">
-      <div class="card-header">
+    <section class="panel details">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
         <h2 id="detailTitle">Details</h2>
         <button id="closeDetailBtn" class="btn btn-ghost">Close</button>
       </div>
-      <pre id="detailJson" class="json"></pre>
+      <pre id="detailJson" class="json muted">Select a run to view details</pre>
     </section>
   </main>
 
-  <footer class="container muted">
-    <small>UI served by <code>amp-migrate ui</code></small>
+  <footer>
+    <small class="muted">UI served by <code>amp-migrate ui</code></small>
   </footer>
 
-  <script src="/static/script.js"></script>
+  <script src="./script.js"></script>
 </body>
 </html>
