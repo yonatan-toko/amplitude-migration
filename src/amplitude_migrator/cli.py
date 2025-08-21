@@ -1,26 +1,10 @@
-import argparse, importlib.util, os, sys
-from .runner import run_migration
-import os
+import argparse, os
 from pathlib import Path
-import textwrap
-import click
+import importlib.util
 
-@click.group()
-def cli():
-    """Amplitude Migration Tool CLI"""
-    pass
+from amplitude_migrator.runner import run_migration
 
-@cli.command()
-def init():
-    """Initialize a new migration project with config.py"""
-    project_dir = Path.cwd() / "amplitude_migration_project"
-    project_dir.mkdir(parents=True, exist_ok=True)
-
-    (project_dir / "migration_runs").mkdir(exist_ok=True)
-
-    config_file = project_dir / "config.py"
-    if not config_file.exists():
-        config_file.write_text("""\
+DEFAULT_CONFIG = """\
 # =========================
 # Amplitude Migration Config
 # =========================
@@ -143,15 +127,9 @@ EXCLUDE_NULL_IDS_IN_MTU = True       # True = ignore events with null user_id/de
 DRY_RUN = True   # True = transform and count only; do NOT send to destination
 VERBOSE = True    # print progress
 REPORTS_DIR = "migration-runs"
-        """)
-        click.echo(f" Created {config_file}")
-    else:
-        click.echo(f" Config already exists: {config_file}")
+"""
 
-
-    readme_file = project_dir / "README.md"
-    if not readme_file.exists():
-        readme_file.write_text(textwrap.dedent("""\
+DEFAULT_README = """\
 # Amplitude Project-to-Project Migrator
 
 This tool lets you **transfer Amplitude events from one project to another**.  
@@ -246,15 +224,9 @@ Done. read=14237 kept=13990 sent=13990 dry_run=False
 ### 4. Report
 - Print counts: read, kept, sent.
 - In dry-run, only preview a few transformed events.
-        """))
-        click.echo(f" Created {readme_file}")
-    else:
-        click.echo(f" README already exists: {readme_file}")
-    
+"""
 
-    time_doc_file = project_dir / "TIME-HANDLING.md"
-    if not time_doc_file.exists():
-        time_doc_file.write_text(textwrap.dedent("""\
+DEFAULT_TIME = """\
 # Time Handling in Amplitude Event Migration
 
 This migration tool preserves **event time semantics** so your destination project keeps the same chronological meaning as the source.
@@ -331,37 +303,70 @@ This way, even if Amplitude’s system only recognizes one `time`, you can still
 - Use `"prefer_client_fallback_server_received"` as default.  
 - Keep `ORIGINAL_TIMES_AS_PROPERTIES = True` unless you are sure you don’t need them.  
 - For charting ease, you can flatten `_migration.orig_*` into top-level properties if desired.
-"""))
-        click.echo(f" Created {time_doc_file}")
-    else:
-        click.echo(f" TIME-HANDLING.md already exists: {time_doc_file}")
+"""
 
-    
+# Utility -------------------------------------------
+def _write_if_missing(path: Path, content: str):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        path.write_text(content, encoding="utf-8")
 
-
-def load_config_module(path: str):
-    spec = importlib.util.spec_from_file_location("user_config", path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)  # type: ignore
+def _load_config_module(cfg_path: Path):
+    spec = importlib.util.spec_from_file_location("cfg", str(cfg_path))
+    mod = importlib.util.module_from_spec(spec)  # type: ignore
+    spec.loader.exec_module(mod)                 # type: ignore
     return mod
 
-def config_to_dict(mod) -> dict:
-    # pull UPPERCASE names only
-    return {k: getattr(mod, k) for k in dir(mod) if k.isupper()}
+# Commands ------------------------------------------
+def cmd_init(args: argparse.Namespace):
+    project_dir = Path.cwd() / "amplitude_migration_project"
+    (project_dir / "migration_runs").mkdir(parents=True, exist_ok=True)
 
-def main():
-    p = argparse.ArgumentParser(description="Amplitude migration runner")
-    p.add_argument("--config", default="config.py", help="Path to config.py")
-    p.add_argument("--dry-run", action="store_true", help="Override DRY_RUN=True")
-    args = p.parse_args()
+    _write_if_missing(project_dir / "config.py", DEFAULT_CONFIG)
+    _write_if_missing(project_dir / "README.md", DEFAULT_README)
+    _write_if_missing(project_dir / "TIME-HANDLING.md", DEFAULT_TIME)
 
-    if not os.path.exists(args.config):
-        print(f"Config file not found: {args.config}", file=sys.stderr)
-        sys.exit(1)
+    print(f"Created/checked: {project_dir}")
+    print("Next step: edit config.py with your details.")
+    print("   Then run:")
+    print("   amp-migrate run --config amplitude_migration_project/config.py --dry-run")
 
-    mod = load_config_module(args.config)
-    cfg = config_to_dict(mod)
+def cmd_run(args: argparse.Namespace):
+    cfg = _load_config_module(Path(args.config).resolve())
+    settings = cfg.__dict__.copy()
     if args.dry_run:
-        cfg["DRY_RUN"] = True
+        settings["DRY_RUN"] = True
+    summary = run_migration(settings)
+    print(summary.get("final_line", "Done."))
 
-    run_migration(cfg)
+def cmd_ui(args: argparse.Namespace):
+    os.environ["MIGRATION_REPORTS_DIR"] = args.reports_dir or os.getcwd()
+    from amplitude_migrator.web.app import start_ui
+    start_ui(host=args.host, port=args.port, reload=False)
+
+# CLI parser ----------------------------------------
+def cli():
+    p = argparse.ArgumentParser(prog="amp-migrate")
+    sub = p.add_subparsers(dest="cmd")
+
+    sp = sub.add_parser("init", help="Create workspace (config.py, README.md, TIME-HANDLING.md)")
+    sp.set_defaults(fn=cmd_init)
+
+    sp = sub.add_parser("run", help="Run migration")
+    sp.add_argument("--config", required=True, help="Path to config.py")
+    sp.add_argument("--dry-run", action="store_true", help="Force dry run")
+    sp.set_defaults(fn=cmd_run)
+
+    sp = sub.add_parser("ui", help="Launch web dashboard")
+    sp.add_argument("--host", default="127.0.0.1")
+    sp.add_argument("--port", type=int, default=8000)
+    sp.add_argument("--reports-dir", help="Directory with run reports (defaults to CWD)")
+    sp.set_defaults(fn=cmd_ui)
+
+    args = p.parse_args()
+    if hasattr(args, "fn"):
+        return args.fn(args)
+    p.print_help()
+
+if __name__ == "__main__":
+    cli()

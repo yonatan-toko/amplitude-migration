@@ -9,7 +9,7 @@ authors = [{ name = "Your Team" }]
 
 # CLI: users can run `amp-migrate`
 [project.scripts]
-amp-migrate = "amplitude_migrator.cli:main"
+amp-migrate = "amplitude_migrator.cli:cli"
 
 [build-system]
 requires = ["setuptools>=64", "wheel"]
