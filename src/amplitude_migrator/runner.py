@@ -145,7 +145,6 @@ def run_migration(cfg: Dict[str, Any]) -> Dict[str, Any]:
         or cfg.get("REPORTS_DIR")
         or "migration_runs"
     ).resolve()
-    reports_dir_path.mkdir(parents=True, exist_ok=True)
     name = time.strftime("run-%Y%m%d-%H%M%S.json", time.gmtime(ended_at))
     path = str(reports_dir_path / name)
     if cfg.get("VERBOSE", True):
