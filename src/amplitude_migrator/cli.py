@@ -1,4 +1,4 @@
-import argparse, os
+import argparse, os, sys
 from pathlib import Path
 import importlib.util
 
@@ -322,14 +322,36 @@ def cmd_init(args: argparse.Namespace):
     print("   Then run:")
     print("   amp-migrate run --config amplitude_migration_project/config.py --dry-run")
     print("   UI: amp-migrate ui --port 8010  # then open the printed URL")
+    print(f"Reports will be written under: {project_dir / 'migration_runs'}")
 
 def cmd_run(args: argparse.Namespace):
-    cfg = _load_config_module(Path(args.config).resolve())
+    cfg_path = Path(args.config).resolve()
+    cfg = _load_config_module(cfg_path)
     settings = cfg.__dict__.copy()
 
-    # Allow overriding reports directory for this run
+    # Ensure reports go to the init-created folder: <config_dir>/migration_runs
+    cfg_dir = cfg_path.parent
+    init_reports_dir = (cfg_dir / "migration_runs").resolve()
+
+    # Create if missing (runner no longer mkdirs by design)
+    try:
+        init_reports_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        print(f"[run] could not ensure reports dir {init_reports_dir}: {e}", file=sys.stderr)
+
+    # Make runner's relative 'migration_runs' land inside the init workspace by switching CWD
+    try:
+        os.chdir(cfg_dir)
+        print(f"[run] cwd set to: {cfg_dir}")
+    except Exception as e:
+        print(f"[run] could not chdir to {cfg_dir}: {e}", file=sys.stderr)
+
+    # Allow overriding reports directory for this run via flag
     if getattr(args, "reports_dir", None):
         os.environ["MIGRATION_REPORTS_DIR"] = str(Path(args.reports_dir).expanduser().resolve())
+    else:
+        # Default to the init-created reports dir for downstream components that honor the env var
+        os.environ["MIGRATION_REPORTS_DIR"] = str(init_reports_dir)
 
     if args.dry_run:
         settings["DRY_RUN"] = True
@@ -337,11 +359,31 @@ def cmd_run(args: argparse.Namespace):
     print(summary.get("final_line", "Done."))
 
 def cmd_ui(args):
-    # If the user supplied --reports-dir, use it. Otherwise default to <CWD>/migration_runs
-    default_reports = Path.cwd() / "migration_runs"
-    reports_dir = Path(args.reports_dir).expanduser() if args.reports_dir else default_reports
+    # Determine reports directory
+    candidates = []
+    # 1) CLI flag has highest priority
+    if args.reports_dir:
+        candidates.append(Path(args.reports_dir).expanduser())
+    # 2) Workspace default: amplitude_migration_project/migration_runs under CWD
+    candidates.append(Path.cwd() / "amplitude_migration_project" / "migration_runs")
+    # 3) Legacy default: migration_runs under CWD
+    candidates.append(Path.cwd() / "migration_runs")
+
+    reports_dir = None
+    for c in candidates:
+        if c.exists():
+            reports_dir = c
+            break
+    if reports_dir is None:
+        # Fallback to first candidate even if it doesn't exist, so UI can still start
+        reports_dir = candidates[0]
+
     os.environ["MIGRATION_REPORTS_DIR"] = str(reports_dir.resolve())
-    print(f"[ui] reports dir: {Path(os.environ['MIGRATION_REPORTS_DIR']).resolve()}")
+    print("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    print("Amplitude Migrator UI")
+    print(f"▶ URL:      http://{args.host}:{args.port}")
+    print(f"Reports dir: {Path(os.environ['MIGRATION_REPORTS_DIR']).resolve()}")
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 
     from amplitude_migrator.web.app import start_ui
     start_ui(host=args.host, port=args.port, reload=False)
