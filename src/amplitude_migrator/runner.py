@@ -148,11 +148,14 @@ def run_migration(cfg: Dict[str, Any]) -> Dict[str, Any]:
     reports_dir_path.mkdir(parents=True, exist_ok=True)
     name = time.strftime("run-%Y%m%d-%H%M%S.json", time.gmtime(ended_at))
     path = str(reports_dir_path / name)
+    if cfg.get("VERBOSE", True):
+        print(f"[report] writing JSON to: {path}")
 
     summary = {
         "started_at": started_at,
         "ended_at": ended_at,
         "duration_s": round(ended_at - started_at, 3),
+        "report_path": path,
         "source": {
             "region": cfg.get("SOURCE_REGION"),
             "export_start": cfg.get("EXPORT_START"),
