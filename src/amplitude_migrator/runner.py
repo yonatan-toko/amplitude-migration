@@ -139,11 +139,24 @@ def run_migration(cfg: Dict[str, Any]) -> Dict[str, Any]:
     mtu = _mtu_estimate(unique_user_ids, unique_device_ids, mtu_strategy)
     est_cost = round(mtu * mtu_rate, 4)
 
-    # Prefer env var, then config, then canonical default
-    reports_dir_path = Path("migration_runs").resolve()
+    # --- Determine reports directory from settings/UI ---
+    rep_dir_cfg = cfg.get("REPORTS_DIR")
+    if rep_dir_cfg:
+        reports_dir_path = Path(rep_dir_cfg)
+        if not reports_dir_path.is_absolute():
+            # resolve relative to CWD
+            reports_dir_path = (Path.cwd() / reports_dir_path).resolve()
+    else:
+        # Stable default under the initialized project folder
+        reports_dir_path = (Path.cwd() / "amplitude_migration_project" / "migration_runs").resolve()
 
+    # Ensure directory exists
+    reports_dir_path.mkdir(parents=True, exist_ok=True)
+
+    # Build filename and absolute path
     name = time.strftime("run-%Y%m%d-%H%M%S.json", time.gmtime(ended_at))
-    path = str(reports_dir_path / name)
+    path_obj = reports_dir_path / name
+    path = str(path_obj)
     if cfg.get("VERBOSE", True):
         print(f"[report] writing JSON to: {path}")
 
@@ -201,6 +214,7 @@ def run_migration(cfg: Dict[str, Any]) -> Dict[str, Any]:
     }
 
     # Save JSON report
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
 
