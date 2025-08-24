@@ -208,14 +208,45 @@ def transform_event(
 
     # --- Augment event_properties with constants ---
     if isinstance(const_props, dict) and const_props:
+        merged_consts: Dict[str, Any] = {}
+        # Legacy flat format: {"k":"v"}
         for k, v in const_props.items():
+            if k not in ("*", et) and not isinstance(v, dict):
+                merged_consts[k] = v
+        # Global scoped: {"*": {...}}
+        gconst = const_props.get("*")
+        if isinstance(gconst, dict):
+            merged_consts.update(gconst)
+        # Event-scoped: {"event_type": {...}}
+        econst = const_props.get(et)
+        if isinstance(econst, dict):
+            merged_consts.update(econst)
+        # Apply
+        for k, v in merged_consts.items():
             props_out[k] = v
 
     # --- Augment event_properties with derived values ---
     if isinstance(derived_props, dict) and derived_props:
-        for new_key, rule in derived_props.items():
-            if not new_key or not isinstance(rule, dict):
-                continue
+        # Build an ordered set of rules: legacy-flat -> global(*) -> event(et).
+        derived_to_apply: Dict[str, Dict[str, Any]] = {}
+        for k, v in derived_props.items():
+            # Legacy flat rule: { new_key: {from, map, default} }
+            if k not in ("*", et) and isinstance(v, dict) and (
+                "from" in v or "map" in v or "default" in v
+            ):
+                derived_to_apply[k] = v
+        gder = derived_props.get("*")
+        if isinstance(gder, dict):
+            for k, v in gder.items():
+                if isinstance(v, dict):
+                    derived_to_apply[k] = v
+        eder = derived_props.get(et)
+        if isinstance(eder, dict):
+            for k, v in eder.items():
+                if isinstance(v, dict):
+                    derived_to_apply[k] = v  # event-scoped overrides
+
+        for new_key, rule in derived_to_apply.items():
             src = rule.get("from")
             val = _get_by_path(evt, src) if src else None
             mapping = rule.get("map")
