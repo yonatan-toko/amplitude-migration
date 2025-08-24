@@ -43,6 +43,10 @@ def run_migration(cfg: Dict[str, Any]) -> Dict[str, Any]:
     sample_limit = int(cfg.get("REPORT_SAMPLE_LIMIT", 20))
     sample_events: List[Dict[str, Any]] = []
 
+    # Caches of last known user_properties from the source stream
+    last_user_props_by_user_id: Dict[str, Dict[str, Any]] = {}
+    last_user_props_by_device_id: Dict[str, Dict[str, Any]] = {}
+
     # --- Optional ID remapping config ---
     user_map_path = cfg.get("USER_ID_REMAP_PATH") or cfg.get("ID_REMAP_PATH")
     device_map_path = cfg.get("DEVICE_ID_REMAP_PATH")
@@ -60,6 +64,34 @@ def run_migration(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
     for evt in _iter_source_events(cfg):
         total_in += 1
+
+        # Update caches with source-side user_properties when present
+        try:
+            src_up = evt.get("user_properties")
+            if isinstance(src_up, dict) and src_up:
+                uid = evt.get("user_id")
+                did = evt.get("device_id")
+                if uid:
+                    last_user_props_by_user_id[str(uid)] = src_up
+                if did:
+                    last_user_props_by_device_id[str(did)] = src_up
+        except Exception:
+            pass
+
+        # Determine fallback user_properties snapshot if this event has none
+        fallback_up = None
+        try:
+            has_up = isinstance(evt.get("user_properties"), dict) and bool(evt.get("user_properties"))
+            if not has_up:
+                uid = evt.get("user_id")
+                did = evt.get("device_id")
+                if uid and str(uid) in last_user_props_by_user_id:
+                    fallback_up = last_user_props_by_user_id[str(uid)]
+                elif did and str(did) in last_user_props_by_device_id:
+                    fallback_up = last_user_props_by_device_id[str(did)]
+        except Exception:
+            fallback_up = None
+
         new_evt = core.transform_event(
             evt,
             allow=cfg.get("EVENT_ALLOWLIST", []),
@@ -71,6 +103,9 @@ def run_migration(cfg: Dict[str, Any]) -> Dict[str, Any]:
             original_times_as_properties=cfg.get("ORIGINAL_TIMES_AS_PROPERTIES", True),
             force_user_id=cfg.get("FORCE_USER_ID"),
             force_device_id=cfg.get("FORCE_DEVICE_ID"),
+            fallback_user_properties=fallback_up,
+            const_props=cfg.get("EVENT_CONST_PROPERTIES", {}),
+            derived_props=cfg.get("EVENT_DERIVED_PROPERTIES", {}),
         )
         if new_evt is None:
             continue

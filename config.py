@@ -70,6 +70,28 @@ EVENT_PROP_RENAME_MAP = {
 }
 
 
+# 1) Constant event properties (added/overwritten on every event)
+EVENT_CONST_PROPERTIES = {
+    # "prop_name": value,
+    # "pipeline": "amplitude-migration",     # example
+}
+
+# 2) Derived event properties (added/overwritten on every event)
+#    You can source from event_properties.* or user_properties.* or top-level fields.
+#    Optional 'map' (value remap) and 'default' if the source is missing/unmapped.
+EVENT_DERIVED_PROPERTIES = {
+    # "triage_bucket": {
+    #     "from": "event_properties.diagnosis",
+    #     "map": {"flu": "low", "covid": "high"},
+    #     "default": "unknown"
+    # },
+    # "has_summary": {
+    #     "from": "event_properties.visitSummary",
+    #     "map": {"": False, None: False},
+    #     "default": True
+    # },
+    # "country_from_top_level": { "from": "country" }  # straight copy
+}
 
 
 # ---- Time handling (what to put in the outgoing "time" field) ------------------------------

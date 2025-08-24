@@ -164,6 +164,24 @@ def filter_props_for_event(et: str, props: Dict[str, Any], keep_map: Dict[str, L
         out = {rmap.get(k, k): v for k, v in out.items()}
     return out
 
+def _get_by_path(evt: Dict[str, Any], path: Optional[str]):
+    """Resolve dotted paths like 'event_properties.foo', 'user_properties.bar', or top-level 'device_id'.
+    Returns None if not found or path is falsy.
+    """
+    if not path:
+        return None
+    parts = str(path).split(".")
+    cur: Any = evt
+    for i, p in enumerate(parts):
+        if i == 0 and p in ("event_properties", "user_properties"):
+            cur = evt.get(p) or {}
+            continue
+        if isinstance(cur, dict) and p in cur:
+            cur = cur[p]
+        else:
+            return None
+    return cur
+
 def transform_event(
     evt: Dict[str, Any],
     allow: List[str],
@@ -175,6 +193,9 @@ def transform_event(
     original_times_as_properties: bool,
     force_user_id: Optional[str],
     force_device_id: Optional[str],
+    fallback_user_properties: Optional[Dict[str, Any]] = None,
+    const_props: Optional[Dict[str, Any]] = None,
+    derived_props: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
     if not should_keep_event(evt, allow, deny):
         return None
@@ -185,12 +206,41 @@ def transform_event(
     props_in = evt.get("event_properties") or {}
     props_out = filter_props_for_event(et, props_in, keep_map, prop_rename_map)
 
+    # --- Augment event_properties with constants ---
+    if isinstance(const_props, dict) and const_props:
+        for k, v in const_props.items():
+            props_out[k] = v
+
+    # --- Augment event_properties with derived values ---
+    if isinstance(derived_props, dict) and derived_props:
+        for new_key, rule in derived_props.items():
+            if not new_key or not isinstance(rule, dict):
+                continue
+            src = rule.get("from")
+            val = _get_by_path(evt, src) if src else None
+            mapping = rule.get("map")
+            if isinstance(mapping, dict) and (val in mapping):
+                val = mapping.get(val)
+            if val is None and "default" in rule:
+                val = rule.get("default")
+            # Write even if None (explicit null), to allow clearing
+            props_out[new_key] = val
+
     # Respect incoming identifiers unless force_* overrides are provided
     user_id = force_user_id if force_user_id is not None else evt.get("user_id")
     device_id = force_device_id if force_device_id is not None else evt.get("device_id")
 
     # Choose outbound event time according to strategy
     out_time_ms = choose_time_ms(evt, time_strategy)
+
+    # Decide user_properties: prefer inline; else fallback snapshot if provided
+    raw_user_props = evt.get("user_properties")
+    if isinstance(raw_user_props, dict) and raw_user_props:
+        out_user_props = raw_user_props
+    elif isinstance(fallback_user_properties, dict) and fallback_user_properties:
+        out_user_props = fallback_user_properties
+    else:
+        out_user_props = None
 
     # Start from pass-through of known top-level fields
     new_evt: Dict[str, Any] = {}
@@ -204,6 +254,9 @@ def transform_event(
     new_evt["user_id"] = user_id
     new_evt["device_id"] = device_id
     new_evt["time"] = out_time_ms
+
+    if out_user_props is not None:
+        new_evt["user_properties"] = out_user_props
 
     return new_evt
 
