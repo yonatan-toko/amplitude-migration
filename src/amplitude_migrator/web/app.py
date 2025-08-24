@@ -24,7 +24,7 @@ SETTINGS_JSON = DEFAULT_PROJECT_DIR / "settings.json"  # reserved for future use
 # Global convention: use ./migration_runs (underscore). Users can override with MIGRATION_REPORTS_DIR.
 
 def _get_reports_dir() -> Path:
-    # 1) Explicit env var always wins
+    # 1) Explicit env var wins
     env_dir = os.getenv("MIGRATION_REPORTS_DIR")
     if env_dir:
         return Path(env_dir).expanduser().resolve()
@@ -34,24 +34,22 @@ def _get_reports_dir() -> Path:
         if CONFIG_PATH.exists():
             ns: Dict[str, Any] = {}
             exec(CONFIG_PATH.read_text(encoding="utf-8"), {}, ns)
-            cfg_dir = CONFIG_PATH.parent
             rep_val = ns.get("REPORTS_DIR")
             if rep_val:
-                rep_path = (cfg_dir / str(rep_val)).expanduser().resolve() if not os.path.isabs(str(rep_val)) else Path(str(rep_val)).expanduser().resolve()
+                rep_path = Path(rep_val)
+                if not rep_path.is_absolute():
+                    rep_path = (CONFIG_PATH.parent / rep_path).resolve()
                 if rep_path.exists():
                     return rep_path
     except Exception:
         pass  # fall through to conventional locations
 
-    # 3) Conventional locations (do not create)
+    # 3) Conventional underscore location only (no legacy hyphen)
     underscore = Path("migration_runs").resolve()
     if underscore.exists():
         return underscore
-    hyphen = Path("migration_runs").resolve()
-    if hyphen.exists():
-        return hyphen
 
-    # 4) Default to canonical underscore path (may not exist yet)
+    # 4) Default to canonical underscore path (do NOT create here)
     return underscore
 
 REPORTS_DIR = _get_reports_dir()
@@ -141,6 +139,19 @@ def save_settings(payload: Dict[str, Any] = Body(...)):
         if not rep_path.is_absolute():
             rep_path = (CONFIG_PATH.parent / rep_path).resolve()
         settings["REPORTS_DIR"] = str(rep_path)
+        # If only USER_ID_REMAP_PATH is set and scope includes device_id, reuse it for device map
+    if settings.get("USER_ID_REMAP_PATH") and not settings.get("DEVICE_ID_REMAP_PATH"):
+        if settings.get("REMAP_SCOPE") in ("device_id", "both"):
+            settings["DEVICE_ID_REMAP_PATH"] = settings["USER_ID_REMAP_PATH"]
+
+    # Normalize remap CSV paths to absolute
+    for key in ("USER_ID_REMAP_PATH", "DEVICE_ID_REMAP_PATH"):
+        p = settings.get(key)
+        if p:
+            p = Path(p)
+            if not p.is_absolute():
+                p = (CONFIG_PATH.parent / p).resolve()
+            settings[key] = str(p)
 
     # Ensure project dir exists, then write config.py
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -165,11 +176,16 @@ async def upload_id_map(file: UploadFile = File(...)):
         out.write(await file.read())
 
     # Patch config to point to this file
+        # Patch config to point to this file for both user and device IDs
     cfg = _read_config_py()
-    cfg["USER_ID_REMAP_PATH"] = str(dest)
+    abs_csv = str(dest.resolve())
+    cfg["USER_ID_REMAP_PATH"] = abs_csv
+    cfg["DEVICE_ID_REMAP_PATH"] = abs_csv
+    cfg["REMAP_SCOPE"] = "both"
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     CONFIG_PATH.write_text(_render_config_py(cfg), encoding="utf-8")
 
-    return {"ok": True, "path": str(dest)}
+    return {"ok": True, "path": abs_csv, "settings": cfg}
 
 def _list_reports():
     if not REPORTS_DIR.exists():
