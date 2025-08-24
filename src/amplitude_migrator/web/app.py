@@ -47,7 +47,7 @@ def _get_reports_dir() -> Path:
     underscore = Path("migration_runs").resolve()
     if underscore.exists():
         return underscore
-    hyphen = Path("migration-runs").resolve()
+    hyphen = Path("migration_runs").resolve()
     if hyphen.exists():
         return hyphen
 
