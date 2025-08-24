@@ -1,75 +1,189 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>Amplitude Migrator — Runs</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="utf-8"/>
+  <title>Amplitude Migrator — UI</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <style>
-    body { font-family: system-ui, sans-serif; margin: 0; background: #f8fafc; color: #111; }
-    header, footer { padding: 1rem 2rem; background: #fff; border-bottom: 1px solid #eee; }
-    h1 { margin: 0; font-size: 1.5rem; }
-    main { display: flex; height: calc(100vh - 120px); }
-    .panel { flex: 1; overflow: auto; padding: 1rem; }
-    .runs { border-right: 1px solid #ddd; }
-    table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
-    th, td { border-bottom: 1px solid #eee; padding: 0.5rem; text-align: left; }
-    th { background: #f1f5f9; position: sticky; top: 0; }
-    tr:hover { background: #f9fafb; cursor: pointer; }
-    .json { white-space: pre-wrap; font-family: monospace; background: #f9fafb; padding: 1rem; border-radius: 8px; }
-    .muted { color: #555; }
-    .btn { padding: 0.3rem 0.6rem; background: #2563eb; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
-    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
-    .btn-ghost { background: transparent; color: #2563eb; border: 1px solid #2563eb; }
+    :root { --b:#111827; --m:#6b7280; --bg:#f8fafc; --card:#fff; --line:#e5e7eb; --pri:#2563eb; }
+    html,body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--b); }
+    header { background:#fff; border-bottom:1px solid var(--line); padding:14px 18px; }
+    header h1 { margin:0 0 6px; font-size:18px; }
+    header .muted { color:var(--m); font-size:13px; margin:2px 0; }
+    nav { margin-top:10px; display:flex; gap:8px; }
+    nav button { border:1px solid var(--line); background:#fff; padding:6px 10px; border-radius:8px; cursor:pointer; }
+    nav button.active { background:var(--pri); color:#fff; border-color:var(--pri); }
+    main { display:grid; grid-template-columns: 1fr; gap:16px; padding:16px; max-width:1100px; margin:0 auto; }
+    .tab { display:none; }
+    .tab.active { display:block; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+    .row2 { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+    label { display:block; font-size:14px; margin:8px 0; }
+    input[type=text], input[type=password], input[type=number], textarea, select {
+      width:100%; padding:8px; border:1px solid var(--line); border-radius:8px; background:#fff;
+      font-size:14px;
+    }
+    textarea { min-height:80px; }
+    .checkbox { display:flex; align-items:center; gap:8px; }
+    .actions { margin-top:12px; display:flex; align-items:center; gap:10px; }
+    .btn { background:var(--pri); color:#fff; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; }
+    .btn.ghost { background:transparent; color:var(--pri); border:1px solid var(--pri); }
+    .muted { color:var(--m); }
+    table { width:100%; border-collapse: collapse; }
+    th, td { text-align:left; border-bottom:1px solid var(--line); padding:8px; font-size:14px; }
+    th { background:#f1f5f9; position:sticky; top:0; }
+    pre { white-space:pre-wrap; background:#0b1020; color:#e5e7eb; border-radius:10px; padding:12px; font-size:12px; overflow:auto; }
+    code { background:#eef2ff; padding:1px 6px; border-radius:6px; }
   </style>
 </head>
 <body>
   <header>
-    <h1>Amplitude Migrator — Runs</h1>
-    <p class="muted">
-      This dashboard reads JSON reports from <code>migration_runs/</code>. Run migrations with <code>amp-migrate</code> and refresh this page.
-    </p>
+    <h1>Amplitude Project → Project Migrator</h1>
+    <p class="muted">Edit <code>config.py</code> entirely from this UI. No file editing required.</p>
     <p class="muted">Reports dir: <code id="reportsDir">detecting…</code></p>
+    <nav>
+      <button data-tab="settings" class="active">Settings</button>
+      <button data-tab="run">Run</button>
+      <button data-tab="reports">Reports</button>
+    </nav>
   </header>
 
   <main>
-    <section class="panel runs">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: .5rem">
-        <h2>Run History</h2>
-        <button id="refreshBtn" class="btn">Refresh</button>
+    <!-- SETTINGS -->
+    <section id="tab-settings" class="tab active">
+      <div class="card">
+        <form id="settings-form">
+          <h2>Source</h2>
+          <label>Source API Key
+            <input name="SOURCE_PROJECT_API_KEY" type="password" placeholder="src key"/>
+          </label>
+          <div class="row2">
+            <label>Region
+              <select name="SOURCE_REGION">
+                <option>US</option><option>EU</option>
+              </select>
+            </label>
+            <label>Local Export (.json.gz)
+              <input name="LOCAL_EXPORT_GZ_PATH" type="text" placeholder="/path/file.json.gz"/>
+            </label>
+          </div>
+          <div class="row2">
+            <label>Export Start (YYYY-MM-DD)
+              <input name="EXPORT_START" type="text" placeholder="2025-08-01"/>
+            </label>
+            <label>Export End (YYYY-MM-DD)
+              <input name="EXPORT_END" type="text" placeholder="2025-08-20"/>
+            </label>
+          </div>
+
+          <h2>Destination</h2>
+          <label>Dest API Key
+            <input name="DEST_PROJECT_API_KEY" type="password" placeholder="dest key"/>
+          </label>
+          <label>Region
+            <select name="DEST_REGION">
+              <option>US</option><option>EU</option>
+            </select>
+          </label>
+
+          <h2>Events & Properties</h2>
+          <label>Event Allowlist (comma-separated)
+            <input name="EVENT_ALLOWLIST" type="text" placeholder="visit_form_started, visit_submitted"/>
+          </label>
+          <label>Property Keep (JSON)
+            <textarea name="EVENT_PROPERTY_KEEP" placeholder='{"*":["*"], "visit_submitted":["doctorName","visitDate"]}'></textarea>
+          </label>
+          <div class="row2">
+            <label>Event Rename Map (JSON)
+              <textarea name="EVENT_RENAME_MAP" placeholder='{"visit_submitted":"visit_created"}'></textarea>
+            </label>
+            <label>Property Rename Map (JSON)
+              <textarea name="EVENT_PROP_RENAME_MAP" placeholder='{"visit_submitted":{"doctor":"doctorName"}}'></textarea>
+            </label>
+          </div>
+
+          <h2>IDs</h2>
+          <div class="row2">
+            <label>Remap Scope
+              <select name="REMAP_SCOPE">
+                <option>user_id</option><option>device_id</option><option>both</option>
+              </select>
+            </label>
+            <label>ID Map CSV path
+              <input name="USER_ID_REMAP_PATH" type="text" placeholder="/path/to/id_map.csv"/>
+            </label>
+          </div>
+          <label>Upload/Replace ID Map CSV
+            <input id="idmap-file" type="file" accept=".csv"/>
+            <button id="btn-upload" type="button" class="btn ghost">Upload</button>
+            <span id="upload-result" class="muted"></span>
+          </label>
+
+          <h2>Time</h2>
+          <div class="row2">
+            <label>Time Strategy
+              <select name="TIME_STRATEGY" id="time-strategy"></select>
+            </label>
+            <label class="checkbox">
+              <input name="ORIGINAL_TIMES_AS_PROPERTIES" type="checkbox"/> Preserve originals in <code>_migration</code>
+            </label>
+          </div>
+
+          <h2>Run & Reports</h2>
+          <div class="row2">
+            <label>Reports Dir
+              <input name="REPORTS_DIR" type="text" placeholder="/path/to/migration_runs"/>
+            </label>
+            <label>Samples Limit
+              <input name="REPORT_SAMPLE_LIMIT" type="number" min="0" step="1" />
+            </label>
+          </div>
+          <label class="checkbox"><input name="DRY_RUN" type="checkbox"/> Default to Dry Run</label>
+          <label class="checkbox"><input name="VERBOSE" type="checkbox"/> Verbose</label>
+
+          <div class="actions">
+            <button type="submit" class="btn">Save Settings</button>
+            <span id="save-status" class="muted"></span>
+          </div>
+        </form>
       </div>
-      <table>
-        <thead>
-          <tr>
-            <th>Report</th>
-            <th>Started</th>
-            <th>Duration (s)</th>
-            <th>Read</th>
-            <th>Kept</th>
-            <th>Sent</th>
-            <th>MTU</th>
-            <th>Est. Cost</th>
-            <th>Mode</th>
-          </tr>
-        </thead>
-        <tbody id="runsBody">
-          <tr><td colspan="9" class="muted">Loading…</td></tr>
-        </tbody>
-      </table>
     </section>
 
-    <section class="panel details">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <h2 id="detailTitle">Details</h2>
-        <button id="closeDetailBtn" class="btn btn-ghost">Close</button>
+    <!-- RUN -->
+    <section id="tab-run" class="tab">
+      <div class="card">
+        <div class="actions">
+          <button id="btn-dry-run" class="btn ghost">Run (Dry)</button>
+          <button id="btn-real-run" class="btn">Run (Send)</button>
+          <span id="run-status" class="muted"></span>
+        </div>
+        <pre id="run-output">// run summary will appear here</pre>
       </div>
-      <pre id="detailJson" class="json muted">Select a run to view details</pre>
+    </section>
+
+    <!-- REPORTS -->
+    <section id="tab-reports" class="tab">
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <h2 style="margin:0;">Run History</h2>
+          <button id="refreshBtn" class="btn ghost">Refresh</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Report</th><th>Started</th><th>Duration (s)</th><th>Read</th><th>Kept</th><th>Sent</th><th>MTU</th><th>Est. Cost</th><th>Mode</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="runsBody"><tr><td colspan="10" class="muted">Loading…</td></tr></tbody>
+        </table>
+
+        <h3>Details</h3>
+        <pre id="detailJson" class="muted">Select a run to view details</pre>
+      </div>
     </section>
   </main>
 
-  <footer>
-    <small class="muted">UI served by <code>amp-migrate ui</code></small>
-  </footer>
-
+  <!-- reports-dir probe -->
   <script>
     (function(){
       fetch('/api/migration/reports-dir')
