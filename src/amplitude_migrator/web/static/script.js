@@ -9,6 +9,63 @@ const fetchJSON = async (url, opt) => {
 const fmtUSD = (v) => (v == null || v === '-' ? '-' : `$${Number(v).toFixed(2)}`);
 const fmtTimeAny = (t) => (t == null ? '-' : (typeof t === 'number' ? new Date(t * 1000).toLocaleString() : new Date(t).toLocaleString()));
 
+// ---- Reports dir header refresh ----
+async function refreshReportsDir() {
+  try {
+    const res = await fetch('/api/migration/reports-dir');
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    const el = document.getElementById('reportsDir');
+    if (el) el.textContent = data.reports_dir || '(not set)';
+  } catch {
+    const el = document.getElementById('reportsDir');
+    if (el) el.textContent = '(unable to detect)';
+  }
+}
+
+// ---- Live JSON validation for textareas ----
+const JSON_FIELDS = [
+  'EVENT_PROPERTY_KEEP',
+  'EVENT_RENAME_MAP',
+  'EVENT_PROP_RENAME_MAP'
+];
+
+function markJsonInvalid(el, msg = 'Invalid JSON') {
+  el.style.borderColor = '#ef4444'; // red-500
+  el.title = msg;
+  el.dataset.invalid = '1';
+}
+
+function clearJsonInvalid(el) {
+  el.style.borderColor = '';
+  el.title = '';
+  delete el.dataset.invalid;
+}
+
+function validateJSONField(el, fallback = '{}') {
+  try {
+    JSON.parse(el.value && el.value.trim() ? el.value : fallback);
+    clearJsonInvalid(el);
+    return true;
+  } catch (e) {
+    markJsonInvalid(el, e.message || 'Invalid JSON');
+    return false;
+  }
+}
+
+function updateSaveEnabled() {
+  const form = document.getElementById('settings-form');
+  const btn = form ? form.querySelector('button[type="submit"]') : null;
+  if (!btn) return;
+  const anyInvalid = JSON_FIELDS.some(name => {
+    const el = form.elements.namedItem(name);
+    return el && el.dataset.invalid === '1';
+  });
+  btn.disabled = anyInvalid;
+  btn.style.opacity = anyInvalid ? 0.6 : 1;
+  btn.style.cursor = anyInvalid ? 'not-allowed' : 'pointer';
+}
+
 // Tabs
 $$('nav button').forEach(b => b.addEventListener('click', () => {
   $$('.tab').forEach(el => el.classList.remove('active'));
@@ -48,8 +105,20 @@ async function loadSettings() {
     else if (k === 'EVENT_ALLOWLIST' && Array.isArray(v)) el.value = v.join(', ');
     else el.value = v ?? '';
   }
+  // attach validators to JSON fields (allow empty => '{}')
+  JSON_FIELDS.forEach(name => {
+    const el = form.elements.namedItem(name);
+    if (!el) return;
+    validateJSONField(el, '{}');
+    el.addEventListener('input', () => {
+      validateJSONField(el, '{}');
+      updateSaveEnabled();
+    });
+  });
+  updateSaveEnabled();
 }
 loadSettings().catch(console.error);
+refreshReportsDir().catch(() => {});
 
 // Save settings => writes config.py
 $('#settings-form').addEventListener('submit', async (e) => {
@@ -81,6 +150,8 @@ $('#settings-form').addEventListener('submit', async (e) => {
     // update Reports dir display
     const el = $('#reportsDir');
     if (el && r.reports_dir) el.textContent = r.reports_dir;
+    // refresh header path from server (in case)
+    refreshReportsDir().catch(() => {});
     setTimeout(() => $('#save-status').textContent = '', 1200);
   } catch (err) {
     console.error(err);
@@ -127,7 +198,10 @@ async function triggerRun(dry) {
   }
 }
 $('#btn-dry-run').addEventListener('click', () => triggerRun(true));
-$('#btn-real-run').addEventListener('click', () => triggerRun(false));
+$('#btn-real-run').addEventListener('click', () => {
+  const ok = window.confirm('This will SEND events to your DESTINATION project.\nAre you sure you want to proceed?');
+  if (ok) triggerRun(false);
+});
 
 // ---------- Reports ----------
 const runsBody = $('#runsBody');
@@ -228,3 +302,6 @@ runsBody.addEventListener('click', async (e) => {
 
 // Refresh button
 $('#refreshBtn').addEventListener('click', fetchRuns);
+
+// Ensure initial save state
+updateSaveEnabled();

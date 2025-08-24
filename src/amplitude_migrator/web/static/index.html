@@ -34,6 +34,25 @@
     th { background:#f1f5f9; position:sticky; top:0; }
     pre { white-space:pre-wrap; background:#0b1020; color:#e5e7eb; border-radius:10px; padding:12px; font-size:12px; overflow:auto; }
     code { background:#eef2ff; padding:1px 6px; border-radius:6px; }
+    /* inline help tooltips */
+    .info { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; margin-left:6px; border-radius:50%; font-size:12px; line-height:18px; cursor:help; color:#2563eb; background:#e0e7ff; user-select:none; position:relative; }
+    .info::after {
+      content: attr(data-tip);
+      position:absolute; z-index:20; left:50%; transform:translateX(-50%);
+      bottom: calc(100% + 8px);
+      min-width: 220px; max-width: 420px;
+      background:#0b1020; color:#e5e7eb; padding:8px 10px; border-radius:8px; font-size:12px; line-height:1.35; box-shadow:0 6px 18px rgba(0,0,0,.25);
+      opacity:0; pointer-events:none; transition: opacity .12s ease;
+      white-space:normal; text-align:left;
+    }
+    .info::before {
+      content:""; position:absolute; left:50%; transform:translateX(-50%);
+      bottom: calc(100% + 4px);
+      border:6px solid transparent; border-top-color:#0b1020;
+      opacity:0; transition: opacity .12s ease;
+    }
+    .info:hover::after, .info:focus::after, .info:active::after,
+    .info:hover::before, .info:focus::before, .info:active::before { opacity:1; }
   </style>
 </head>
 <body>
@@ -54,66 +73,66 @@
       <div class="card">
         <form id="settings-form">
           <h2>Source</h2>
-          <label>Source API Key
+          <label>Source API Key <span class="info" data-tip="Amplitude API key for the SOURCE project. Required when using the Export API.">ⓘ</span>
             <input name="SOURCE_PROJECT_API_KEY" type="password" placeholder="src key"/>
           </label>
           <div class="row2">
-            <label>Region
+            <label>Region <span class="info" data-tip="Data center of the SOURCE project (US or EU). Must match the project you export from.">ⓘ</span>
               <select name="SOURCE_REGION">
                 <option>US</option><option>EU</option>
               </select>
             </label>
-            <label>Local Export (.json.gz)
+            <label>Local Export (.json.gz) <span class="info" data-tip="Optional. Use a local Amplitude export (.json.gz). If set, the Export API window is ignored.">ⓘ</span>
               <input name="LOCAL_EXPORT_GZ_PATH" type="text" placeholder="/path/file.json.gz"/>
             </label>
           </div>
           <div class="row2">
-            <label>Export Start (YYYY-MM-DD)
+            <label>Export Start (YYYY-MM-DD) <span class="info" data-tip="Start date for Export API (UTC). Use with Export End when not using a local file.">ⓘ</span>
               <input name="EXPORT_START" type="text" placeholder="2025-08-01"/>
             </label>
-            <label>Export End (YYYY-MM-DD)
+            <label>Export End (YYYY-MM-DD) <span class="info" data-tip="End date for Export API (UTC). Must be on or after the start date.">ⓘ</span>
               <input name="EXPORT_END" type="text" placeholder="2025-08-20"/>
             </label>
           </div>
 
           <h2>Destination</h2>
-          <label>Dest API Key
+          <label>Dest API Key <span class="info" data-tip="Amplitude API key for the DESTINATION project where events will be written.">ⓘ</span>
             <input name="DEST_PROJECT_API_KEY" type="password" placeholder="dest key"/>
           </label>
-          <label>Region
+          <label>Region <span class="info" data-tip="Data center of the DESTINATION project (US or EU). Must match that project.">ⓘ</span>
             <select name="DEST_REGION">
               <option>US</option><option>EU</option>
             </select>
           </label>
 
           <h2>Events & Properties</h2>
-          <label>Event Allowlist (comma-separated)
-            <input name="EVENT_ALLOWLIST" type="text" placeholder="visit_form_started, visit_submitted"/>
+          <label>Event Allowlist (comma-separated) <span class="info" data-tip="Only migrate these event types. Leave empty to migrate all events.">ⓘ</span>
+            <input name="EVENT_ALLOWLIST" type="text" placeholder="event_1, event_2"/>
           </label>
-          <label>Property Keep (JSON)
-            <textarea name="EVENT_PROPERTY_KEEP" placeholder='{"*":["*"], "visit_submitted":["doctorName","visitDate"]}'></textarea>
+          <label>Property Keep (JSON) <span class="info" data-tip='JSON map of event→properties to keep. Use "*" to keep all. Example: {"*":["*"], "visit_submitted":["doctorName","visitDate"]}'>ⓘ</span>
+            <textarea name="EVENT_PROPERTY_KEEP" placeholder='{"*":["*"], "event_1":["Property_1","Property_2"]}'></textarea>
           </label>
           <div class="row2">
-            <label>Event Rename Map (JSON)
-              <textarea name="EVENT_RENAME_MAP" placeholder='{"visit_submitted":"visit_created"}'></textarea>
+            <label>Event Rename Map (JSON) <span class="info" data-tip='Optional JSON mapping of old event names to new ones. Example: {"visit_submitted":"visit_created"}'>ⓘ</span>
+              <textarea name="EVENT_RENAME_MAP" placeholder='{"event_1":"event_1_new_name"}'></textarea>
             </label>
-            <label>Property Rename Map (JSON)
-              <textarea name="EVENT_PROP_RENAME_MAP" placeholder='{"visit_submitted":{"doctor":"doctorName"}}'></textarea>
+            <label>Property Rename Map (JSON) <span class="info" data-tip='Optional JSON mapping of old property keys to new keys per event. Example: {"visit_submitted":{"doctor":"doctorName"}}'>ⓘ</span>
+              <textarea name="EVENT_PROP_RENAME_MAP" placeholder='{"event_1":{"Property_1":"Property_1_new_name"}}'></textarea>
             </label>
           </div>
 
           <h2>IDs</h2>
           <div class="row2">
-            <label>Remap Scope
+            <label>Remap Scope <span class="info" data-tip="Choose which identifiers to remap using your CSV: user_id, device_id, or both.">ⓘ</span>
               <select name="REMAP_SCOPE">
                 <option>user_id</option><option>device_id</option><option>both</option>
               </select>
             </label>
-            <label>ID Map CSV path
+            <label>ID Map CSV path <span class="info" data-tip='CSV with headers old_id,new_id. You can also use the Upload button below to select a file.'>ⓘ</span>
               <input name="USER_ID_REMAP_PATH" type="text" placeholder="/path/to/id_map.csv"/>
             </label>
           </div>
-          <label>Upload/Replace ID Map CSV
+          <label>Upload/Replace ID Map CSV <span class="info" data-tip="Upload a CSV and the path will be saved into config.py automatically.">ⓘ</span>
             <input id="idmap-file" type="file" accept=".csv"/>
             <button id="btn-upload" type="button" class="btn ghost">Upload</button>
             <span id="upload-result" class="muted"></span>
@@ -121,25 +140,25 @@
 
           <h2>Time</h2>
           <div class="row2">
-            <label>Time Strategy
+            <label>Time Strategy <span class="info" data-tip="Which timestamp to send to Amplitude: client time, server times, or a fallback strategy.">ⓘ</span>
               <select name="TIME_STRATEGY" id="time-strategy"></select>
             </label>
             <label class="checkbox">
-              <input name="ORIGINAL_TIMES_AS_PROPERTIES" type="checkbox"/> Preserve originals in <code>_migration</code>
+              <input name="ORIGINAL_TIMES_AS_PROPERTIES" type="checkbox"/> Preserve originals in <code>_migration</code> <span class="info" data-tip="Adds original timestamps under the _migration object for auditing.">ⓘ</span>
             </label>
           </div>
 
           <h2>Run & Reports</h2>
           <div class="row2">
-            <label>Reports Dir
+            <label>Reports Dir <span class="info" data-tip="Where run JSON reports are saved. The UI reads from this folder.">ⓘ</span>
               <input name="REPORTS_DIR" type="text" placeholder="/path/to/migration_runs"/>
             </label>
-            <label>Samples Limit
+            <label>Samples Limit <span class="info" data-tip="How many transformed events to store as samples per run (for the UI).">ⓘ</span>
               <input name="REPORT_SAMPLE_LIMIT" type="number" min="0" step="1" />
             </label>
           </div>
-          <label class="checkbox"><input name="DRY_RUN" type="checkbox"/> Default to Dry Run</label>
-          <label class="checkbox"><input name="VERBOSE" type="checkbox"/> Verbose</label>
+          <label class="checkbox"><input name="DRY_RUN" type="checkbox"/> Default to Dry Run <span class="info" data-tip="Dry run reads and transforms but does not send to the destination.">ⓘ</span></label>
+          <label class="checkbox"><input name="VERBOSE" type="checkbox"/> Verbose <span class="info" data-tip="Print more logs during migration.">ⓘ</span></label>
 
           <div class="actions">
             <button type="submit" class="btn">Save Settings</button>
