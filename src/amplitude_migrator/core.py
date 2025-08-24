@@ -182,6 +182,19 @@ def _get_by_path(evt: Dict[str, Any], path: Optional[str]):
             return None
     return cur
 
+def _match_conditions(evt: Dict[str, Any], conditions: Dict[str, Any]) -> bool:
+    """Return True if all dotted or top-level paths equal their expected values."""
+    if not isinstance(conditions, dict):
+        return False
+    for path, expected in conditions.items():
+        if isinstance(path, str) and "." in path:
+            val = _get_by_path(evt, path)
+        else:
+            val = evt.get(path)
+        if val != expected:
+            return False
+    return True
+
 def transform_event(
     evt: Dict[str, Any],
     allow: List[str],
@@ -196,11 +209,25 @@ def transform_event(
     fallback_user_properties: Optional[Dict[str, Any]] = None,
     const_props: Optional[Dict[str, Any]] = None,
     derived_props: Optional[Dict[str, Any]] = None,
+    rename_rules: Optional[List[Dict[str, Any]]] = None,
 ) -> Optional[Dict[str, Any]]:
     if not should_keep_event(evt, allow, deny):
         return None
 
     et = rename_event_type(evt.get("event_type", ""), rename_map)
+
+    # Apply conditional rename rules (first match wins)
+    if isinstance(rename_rules, list) and rename_rules:
+        for rule in rename_rules:
+            try:
+                when = rule.get("when", {})
+                to = rule.get("rename_to")
+                if to and _match_conditions(evt, when):
+                    et = to
+                    break
+            except Exception:
+                # Ignore malformed rule and continue
+                continue
 
     # Filter event_properties according to keep & rename rules
     props_in = evt.get("event_properties") or {}

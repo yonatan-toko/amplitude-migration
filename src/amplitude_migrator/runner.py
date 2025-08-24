@@ -94,6 +94,7 @@ def run_migration(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
         new_evt = core.transform_event(
             evt,
+            rename_rules=cfg.get("EVENT_RENAME_RULES", []),
             allow=cfg.get("EVENT_ALLOWLIST", []),
             deny=cfg.get("EVENT_DENYLIST", []),
             rename_map=cfg.get("EVENT_RENAME_MAP", {}),
