@@ -18,11 +18,9 @@ STATIC_DIR = BASE_DIR / "static"
 def _get_reports_dir() -> Path:
     env_dir = os.getenv("MIGRATION_REPORTS_DIR")
     if env_dir:
-        p = Path(env_dir).expanduser().resolve()
-        p.mkdir(parents=True, exist_ok=True)
-        return p
+        return Path(env_dir).expanduser().resolve()
 
-    # Canonical default
+    # Prefer canonical underscore folder if it exists
     underscore = Path("migration_runs").resolve()
     if underscore.exists():
         return underscore
@@ -32,8 +30,7 @@ def _get_reports_dir() -> Path:
     if hyphen.exists():
         return hyphen
 
-    # If nothing exists, create the canonical folder
-    underscore.mkdir(parents=True, exist_ok=True)
+    # Default to canonical path (do NOT create here)
     return underscore
 
 REPORTS_DIR = _get_reports_dir()
@@ -50,7 +47,8 @@ app.add_middleware(
 
 # -------- Helpers --------
 def _list_reports():
-    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    if not REPORTS_DIR.exists():
+        return []
     files = sorted(REPORTS_DIR.glob("run-*.json"), reverse=True)
     out = []
     for p in files:
@@ -96,6 +94,10 @@ def get_run_by_name(name: str):
     with path.open("r", encoding="utf-8") as f:
         data = json.load(f)
     return JSONResponse(data)
+
+@app.get("/api/migration/reports-dir")
+def get_reports_dir():
+    return {"reports_dir": str(REPORTS_DIR)}
 
 # Mount static last so API routes take precedence
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

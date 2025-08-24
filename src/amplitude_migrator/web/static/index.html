@@ -28,6 +28,7 @@
     <p class="muted">
       This dashboard reads JSON reports from <code>migration_runs/</code>. Run migrations with <code>amp-migrate</code> and refresh this page.
     </p>
+    <p class="muted">Reports dir: <code id="reportsDir">detecting…</code></p>
   </header>
 
   <main>
@@ -69,6 +70,14 @@
     <small class="muted">UI served by <code>amp-migrate ui</code></small>
   </footer>
 
+  <script>
+    (function(){
+      fetch('/api/migration/reports-dir')
+        .then(r => r.ok ? r.json() : Promise.reject(r.status))
+        .then(d => { const el = document.getElementById('reportsDir'); if (el) el.textContent = d.reports_dir || '(not set)'; })
+        .catch(() => { const el = document.getElementById('reportsDir'); if (el) el.textContent = '(unable to detect)'; });
+    })();
+  </script>
   <script src="./script.js"></script>
 </body>
 </html>
