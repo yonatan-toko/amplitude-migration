@@ -7,6 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 import uvicorn
+from pydantic import BaseModel
+from amplitude_migrator.runner import run_migration
 
 
 # Where this file lives (inside the installed package)
@@ -195,6 +197,10 @@ def _list_reports():
             continue
     return out
 
+# Define request model for running migrations
+class RunRequest(BaseModel):
+    dry_run: bool = True
+
 # -------- Routes --------
 @app.get("/api/migration/runs")
 def list_runs():
@@ -221,6 +227,47 @@ def get_run_by_name(name: str):
 @app.get("/api/migration/reports-dir")
 def get_reports_dir():
     return {"reports_dir": str(REPORTS_DIR)}
+
+
+# --- Migration runner endpoints ---
+@app.post("/api/run")
+def api_run(req: RunRequest):
+    # Load settings from config.py managed by the UI
+    settings = _read_config_py()
+    settings["DRY_RUN"] = bool(req.dry_run)
+
+    # Ensure reports dir exists (runner no longer creates it)
+    reports_dir = Path(settings.get("REPORTS_DIR") or (DEFAULT_PROJECT_DIR / "migration_runs"))
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    summary = run_migration(settings)
+    return {"ok": True, "summary": summary}
+
+
+@app.get("/api/run")
+def api_run_get():
+    # Convenience: GET triggers a dry run
+    settings = _read_config_py()
+    settings["DRY_RUN"] = True
+
+    reports_dir = Path(settings.get("REPORTS_DIR") or (DEFAULT_PROJECT_DIR / "migration_runs"))
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    summary = run_migration(settings)
+    return {"ok": True, "summary": summary}
+
+
+@app.options("/api/run")
+def api_run_options():
+    # Helpful if a preflight ever occurs
+    return JSONResponse(
+        content={},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+        },
+    )
 
 # Mount static last so API routes take precedence
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
