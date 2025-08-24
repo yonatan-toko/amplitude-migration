@@ -7,6 +7,19 @@ import csv
 from pathlib import Path
 from typing import Dict, Iterable, Literal, Optional
 
+# Top-level fields we pass through from source events unchanged (if present)
+TOP_LEVEL_PASSTHROUGH: Set[str] = {
+    "app_version", "library", "platform",
+    "os_name", "os_version",
+    "device_brand", "device_manufacturer", "device_model", "device_type",
+    "carrier", "country", "region", "city", "dma", "language",
+    "price", "quantity", "revenue", "productId", "revenueType",
+    "location_lat", "location_lng", "ip",
+    "idfa", "idfv", "adid", "android_id",
+    "event_id", "session_id", "insert_id",
+    "group_properties", "groups", "user_properties",
+}
+
 RemapScope = Literal["user_id", "device_id", "both"]
 
 def load_id_map(path: str | Path) -> Dict[str, str]:
@@ -49,10 +62,7 @@ def apply_id_remap(
     def _bump(key: str, inc: int = 1):
         counters[key] = counters.get(key, 0) + inc
 
-    props = evt.setdefault("event_properties", {})
-
-    # Prepare _migration audit container (don’t overwrite if exists)
-    mig = props.setdefault("_migration", {})
+    # We no longer write any audit data into event_properties._migration
     touched = False
     any_unmapped_drop = False
 
@@ -62,8 +72,6 @@ def apply_id_remap(
             if uid is None:
                 _bump("id_remap_user_id_missing")
             elif uid in user_map:
-                if preserve_original_ids and "orig_user_id" not in mig:
-                    mig["orig_user_id"] = uid
                 evt["user_id"] = user_map[uid]
                 _bump("events_remapped_user_id")
                 touched = True
@@ -78,8 +86,6 @@ def apply_id_remap(
             if did is None:
                 _bump("id_remap_device_id_missing")
             elif did in device_map:
-                if preserve_original_ids and "orig_device_id" not in mig:
-                    mig["orig_device_id"] = did
                 evt["device_id"] = device_map[did]
                 _bump("events_remapped_device_id")
                 touched = True
@@ -87,9 +93,6 @@ def apply_id_remap(
                 _bump("unmapped_device_ids_seen")
                 if unmapped_policy == "drop":
                     any_unmapped_drop = True
-
-    if touched:
-        mig["id_remap_applied"] = True
 
     if any_unmapped_drop:
         _bump("events_dropped_unmapped")
@@ -177,39 +180,31 @@ def transform_event(
         return None
 
     et = rename_event_type(evt.get("event_type", ""), rename_map)
+
+    # Filter event_properties according to keep & rename rules
     props_in = evt.get("event_properties") or {}
     props_out = filter_props_for_event(et, props_in, keep_map, prop_rename_map)
 
+    # Respect incoming identifiers unless force_* overrides are provided
     user_id = force_user_id if force_user_id is not None else evt.get("user_id")
-    device_id = force_device_id if force_device_id is not None else (evt.get("device_id") or "migration")
+    device_id = force_device_id if force_device_id is not None else evt.get("device_id")
+
+    # Choose outbound event time according to strategy
     out_time_ms = choose_time_ms(evt, time_strategy)
 
-    if original_times_as_properties:
-        orig_client_ms = evt.get("time") if isinstance(evt.get("time"), int) else None
-        orig_srv_recv_ms = parse_iso_to_ms(evt.get("server_received_time"))
-        orig_srv_upld_ms = parse_iso_to_ms(evt.get("server_upload_time"))
-        mig = {
-            "orig_client_time_ms": orig_client_ms,
-            "orig_server_received_ms": orig_srv_recv_ms,
-            "orig_server_upload_ms": orig_srv_upld_ms,
-            "time_strategy_used": time_strategy,
-        }
-        if "_migration" in props_out and isinstance(props_out["_migration"], dict):
-            props_out["_migration"].update(mig)
-        else:
-            props_out["_migration"] = mig
+    # Start from pass-through of known top-level fields
+    new_evt: Dict[str, Any] = {}
+    for k in TOP_LEVEL_PASSTHROUGH:
+        if k in evt:
+            new_evt[k] = evt[k]
 
-    new_evt = {
-        "event_type": et,
-        "event_properties": props_out,
-        "user_id": user_id,
-        "device_id": device_id,
-        "time": out_time_ms,
-    }
-    if "user_properties" in evt and isinstance(evt["user_properties"], dict):
-        new_evt["user_properties"] = evt["user_properties"]
-    if "groups" in evt and isinstance(evt["groups"], dict):
-        new_evt["groups"] = evt["groups"]
+    # Override core fields we control
+    new_evt["event_type"] = et
+    new_evt["event_properties"] = props_out
+    new_evt["user_id"] = user_id
+    new_evt["device_id"] = device_id
+    new_evt["time"] = out_time_ms
+
     return new_evt
 
 # ---------- Ingest ----------
