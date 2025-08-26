@@ -1,8 +1,8 @@
 import json, os, time
-from typing import Dict, Any, Iterable, List, Optional, Set
-from . import core
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Dict, Any, Iterable, List, Optional, Set
+
+from . import core
 from amplitude_migrator.core import load_id_map, apply_id_remap
 
 def _iter_source_events(cfg) -> Iterable[Dict[str, Any]]:
@@ -246,6 +246,21 @@ def run_migration(cfg: Dict[str, Any]) -> Dict[str, Any]:
             "original_times_as_properties": bool(cfg.get("ORIGINAL_TIMES_AS_PROPERTIES", True)),
             "allowlist": cfg.get("EVENT_ALLOWLIST", []),
             "denylist": cfg.get("EVENT_DENYLIST", []),
+            "rename_map_count": len(dict(cfg.get("EVENT_RENAME_MAP", {})) or {}),
+            "rename_rules_count": len(list(cfg.get("EVENT_RENAME_RULES", [])) or []),
+            "const_props": (
+                list((cfg.get("EVENT_CONST_PROPERTIES", {}) or {}).keys())
+                if isinstance(cfg.get("EVENT_CONST_PROPERTIES", {}), dict) else []
+            ),
+            "derived_props": (
+                list((cfg.get("EVENT_DERIVED_PROPERTIES", {}) or {}).keys())
+                if isinstance(cfg.get("EVENT_DERIVED_PROPERTIES", {}), dict) else []
+            ),
+        },
+        "augmentation_preview": {
+            "EVENT_CONST_PROPERTIES": cfg.get("EVENT_CONST_PROPERTIES", {}),
+            "EVENT_DERIVED_PROPERTIES": cfg.get("EVENT_DERIVED_PROPERTIES", {}),
+            "EVENT_RENAME_RULES": cfg.get("EVENT_RENAME_RULES", []),
         },
     }
 
