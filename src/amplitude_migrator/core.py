@@ -63,7 +63,6 @@ def apply_id_remap(
     def _bump(key: str, inc: int = 1):
         counters[key] = counters.get(key, 0) + inc
 
-    # We no longer write any audit data into event_properties._migration
     touched = False
     any_unmapped_drop = False
 
@@ -73,6 +72,8 @@ def apply_id_remap(
             if uid is None:
                 _bump("id_remap_user_id_missing")
             elif uid in user_map:
+                if preserve_original_ids and uid != user_map[uid]:
+                    evt.setdefault("event_properties", {}).setdefault("_migration", {})["orig_user_id"] = uid
                 evt["user_id"] = user_map[uid]
                 _bump("events_remapped_user_id")
                 touched = True
@@ -87,6 +88,8 @@ def apply_id_remap(
             if did is None:
                 _bump("id_remap_device_id_missing")
             elif did in device_map:
+                if preserve_original_ids and did != device_map[did]:
+                    evt.setdefault("event_properties", {}).setdefault("_migration", {})["orig_device_id"] = did
                 evt["device_id"] = device_map[did]
                 _bump("events_remapped_device_id")
                 touched = True
@@ -349,7 +352,6 @@ def transform_event(
     const_props: Optional[Dict[str, Any]] = None,
     derived_props: Optional[Dict[str, Any]] = None,
     rename_rules: Optional[List[Dict[str, Any]]] = None,
-    preserve_original_ids: bool = False,
 ) -> Optional[Dict[str, Any]]:
     if not should_keep_event(evt, allow, deny):
         return None
@@ -490,18 +492,6 @@ def transform_event(
 
     if out_user_props is not None:
         new_evt["user_properties"] = out_user_props
-    if preserve_original_ids:
-        migration_block = {}
-        if evt.get("user_id") and evt.get("user_id") != user_id:
-            migration_block["original_user_id"] = evt.get("user_id")
-        if evt.get("device_id") and evt.get("device_id") != device_id:
-            migration_block["original_device_id"] = evt.get("device_id")
-        if migration_block:
-            # merge into event_properties
-            ep = new_evt.get("event_properties") or {}
-            ep["_migration"] = migration_block
-            new_evt["event_properties"] = ep
-            new_evt["event_properties"] = ep
 
     return new_evt
 

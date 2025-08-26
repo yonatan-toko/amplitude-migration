@@ -114,6 +114,8 @@ TIME_STRATEGY = "prefer_client_fallback_server_received"
 ORIGINAL_TIMES_AS_PROPERTIES = True
 
 
+MIGRATION_AUDIT = True  # add "_migration" key to event_properties with metadata about the migration
+
 
 # ---- User identity handling ------------------------------------------------------
 # Keep "user_id" and/or "device_id" as-is. If you need to overwrite, set these:
