@@ -159,4 +159,4 @@ VERBOSE = True    # print progress
 REPORTS_DIR = "migration_runs"
 
 
-REPORTS_SAMPLE_LIMIT = 20 # during dry run, print up to this many transformed events
+REPORT_SAMPLE_LIMIT = 20 # during dry run, print up to this many transformed events
