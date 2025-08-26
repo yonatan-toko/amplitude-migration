@@ -349,6 +349,7 @@ def transform_event(
     const_props: Optional[Dict[str, Any]] = None,
     derived_props: Optional[Dict[str, Any]] = None,
     rename_rules: Optional[List[Dict[str, Any]]] = None,
+    preserve_original_ids: bool = False,
 ) -> Optional[Dict[str, Any]]:
     if not should_keep_event(evt, allow, deny):
         return None
@@ -489,6 +490,18 @@ def transform_event(
 
     if out_user_props is not None:
         new_evt["user_properties"] = out_user_props
+    if preserve_original_ids:
+        migration_block = {}
+        if evt.get("user_id") and evt.get("user_id") != user_id:
+            migration_block["original_user_id"] = evt.get("user_id")
+        if evt.get("device_id") and evt.get("device_id") != device_id:
+            migration_block["original_device_id"] = evt.get("device_id")
+        if migration_block:
+            # merge into event_properties
+            ep = new_evt.get("event_properties") or {}
+            ep["_migration"] = migration_block
+            new_evt["event_properties"] = ep
+            new_evt["event_properties"] = ep
 
     return new_evt
 
