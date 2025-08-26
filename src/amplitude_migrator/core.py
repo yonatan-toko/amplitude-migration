@@ -67,15 +67,15 @@ def apply_id_remap(
     any_unmapped_drop = False
 
 
-    """""
+    
     if scope in ("user_id", "both"):
         uid = evt.get("user_id")
         if user_map is not None:
             if uid is None:
                 _bump("id_remap_user_id_missing")
             elif uid in user_map:
-                if preserve_original_ids and uid != user_map[uid]:
-                    evt.setdefault("event_properties", {}).setdefault("_migration", {})["orig_user_id"] = uid
+                #if preserve_original_ids and uid != user_map[uid]:
+                #    evt.setdefault("event_properties", {}).setdefault("_migration", {})["orig_user_id"] = uid
                 evt["user_id"] = user_map[uid]
                 _bump("events_remapped_user_id")
                 touched = True
@@ -90,8 +90,8 @@ def apply_id_remap(
             if did is None:
                 _bump("id_remap_device_id_missing")
             elif did in device_map:
-                if preserve_original_ids and did != device_map[did]:
-                    evt.setdefault("event_properties", {}).setdefault("_migration", {})["orig_device_id"] = did
+                #if preserve_original_ids and did != device_map[did]:
+                #    evt.setdefault("event_properties", {}).setdefault("_migration", {})["orig_device_id"] = did
                 evt["device_id"] = device_map[did]
                 _bump("events_remapped_device_id")
                 touched = True
@@ -99,7 +99,7 @@ def apply_id_remap(
                 _bump("unmapped_device_ids_seen")
                 if unmapped_policy == "drop":
                     any_unmapped_drop = True
-    """""
+    
                     
 
     if any_unmapped_drop:
