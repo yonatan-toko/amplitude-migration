@@ -107,7 +107,6 @@ def run_migration(cfg: Dict[str, Any]) -> Dict[str, Any]:
             fallback_user_properties=fallback_up,
             const_props=cfg.get("EVENT_CONST_PROPERTIES", {}),
             derived_props=cfg.get("EVENT_DERIVED_PROPERTIES", {}),
-            preserve_original_ids=cfg.get("PRESERVE_ORIGINAL_IDS", False),
         )
         if new_evt is None:
             continue
