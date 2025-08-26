@@ -157,3 +157,6 @@ EXCLUDE_NULL_IDS_IN_MTU = True       # True = ignore events with null user_id/de
 DRY_RUN = True   # True = transform and count only; do NOT send to destination
 VERBOSE = True    # print progress
 REPORTS_DIR = "migration_runs"
+
+
+REPORTS_SAMPLE_LIMIT = 20 # during dry run, print up to this many transformed events
