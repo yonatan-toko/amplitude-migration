@@ -66,6 +66,8 @@ def apply_id_remap(
     touched = False
     any_unmapped_drop = False
 
+
+    """""
     if scope in ("user_id", "both"):
         uid = evt.get("user_id")
         if user_map is not None:
@@ -97,6 +99,8 @@ def apply_id_remap(
                 _bump("unmapped_device_ids_seen")
                 if unmapped_policy == "drop":
                     any_unmapped_drop = True
+    """""
+                    
 
     if any_unmapped_drop:
         _bump("events_dropped_unmapped")
