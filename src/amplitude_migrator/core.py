@@ -6,7 +6,6 @@ from .time_utils import choose_time_ms, parse_iso_to_ms
 import csv
 from pathlib import Path
 from typing import Dict, Iterable, Literal, Optional
-import zipfile
 
 # Top-level fields we pass through from source events unchanged (if present)
 TOP_LEVEL_PASSTHROUGH: Set[str] = {
@@ -63,6 +62,7 @@ def apply_id_remap(
     def _bump(key: str, inc: int = 1):
         counters[key] = counters.get(key, 0) + inc
 
+    # We no longer write any audit data into event_properties._migration
     touched = False
     any_unmapped_drop = False
 
@@ -72,8 +72,6 @@ def apply_id_remap(
             if uid is None:
                 _bump("id_remap_user_id_missing")
             elif uid in user_map:
-                if preserve_original_ids and uid != user_map[uid]:
-                    evt.setdefault("event_properties", {}).setdefault("_migration", {})["orig_user_id"] = uid
                 evt["user_id"] = user_map[uid]
                 _bump("events_remapped_user_id")
                 touched = True
@@ -88,8 +86,6 @@ def apply_id_remap(
             if did is None:
                 _bump("id_remap_device_id_missing")
             elif did in device_map:
-                if preserve_original_ids and did != device_map[did]:
-                    evt.setdefault("event_properties", {}).setdefault("_migration", {})["orig_device_id"] = did
                 evt["device_id"] = device_map[did]
                 _bump("events_remapped_device_id")
                 touched = True
@@ -134,42 +130,6 @@ def iterate_ndjson_from_gz_bytes(gz_bytes: bytes) -> Iterable[Dict[str, Any]]:
             except json.JSONDecodeError:
                 continue
 
-# --- Helper: auto-detect and iterate NDJSON from bytes (ZIP/GZ/PLAIN) ---
-def iterate_ndjson_from_bytes(raw_bytes: bytes) -> Iterable[Dict[str, Any]]:
-    """Auto-detect and iterate events from raw export bytes.
-    Handles ZIP (with .json or .json.gz entries), GZIP (.json.gz), or plain NDJSON."""
-    # ZIP file? (starts with PK)
-    if raw_bytes[:2] == b"PK":
-        with zipfile.ZipFile(io.BytesIO(raw_bytes)) as zf:
-            for name in zf.namelist():
-                if name.endswith(".json.gz"):
-                    with zf.open(name) as member:
-                        for evt in iterate_ndjson_from_gz_bytes(member.read()):
-                            yield evt
-                elif name.endswith(".json"):
-                    with zf.open(name) as member:
-                        for line in io.TextIOWrapper(member, encoding="utf-8", errors="ignore"):
-                            line = line.strip()
-                            if not line:
-                                continue
-                            try:
-                                yield json.loads(line)
-                            except json.JSONDecodeError:
-                                continue
-    # GZIP file? (magic 1F 8B)
-    elif raw_bytes[:2] == b"\x1f\x8b":
-        yield from iterate_ndjson_from_gz_bytes(raw_bytes)
-    else:
-        # Assume plain NDJSON
-        for line in raw_bytes.decode("utf-8", "ignore").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                yield json.loads(line)
-            except json.JSONDecodeError:
-                continue
-
 def iterate_ndjson_from_gz_path(path: str) -> Iterable[Dict[str, Any]]:
     with gzip.open(path, "rt", encoding="utf-8", errors="ignore") as f:
         for line in f:
@@ -180,58 +140,6 @@ def iterate_ndjson_from_gz_path(path: str) -> Iterable[Dict[str, Any]]:
                 yield json.loads(line)
             except json.JSONDecodeError:
                 continue
-
-def iterate_ndjson_from_zip_bytes(zip_bytes: bytes) -> Iterable[Dict[str, Any]]:
-    """Iterate all NDJSON events from a ZIP containing *.json.gz or *.json files."""
-    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-        # Prefer *.json.gz entries first, then *.json
-        names = sorted(zf.namelist())
-        gz_names = [n for n in names if n.lower().endswith(".json.gz")]
-        json_names = [n for n in names if n.lower().endswith(".json")]
-        # Read gzipped JSON lines
-        for name in gz_names:
-            with zf.open(name, "r") as fp:
-                with gzip.GzipFile(fileobj=io.BytesIO(fp.read()), mode="rb") as gz:
-                    for raw in gz:
-                        line = raw.decode("utf-8", "ignore").strip()
-                        if not line:
-                            continue
-                        try:
-                            yield json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-        # Read plain JSON lines
-        for name in json_names:
-            with zf.open(name, "r") as fp:
-                for raw in fp:
-                    line = raw.decode("utf-8", "ignore").strip()
-                    if not line:
-                        continue
-                    try:
-                        yield json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-
-def iterate_ndjson_from_any_bytes(blob: bytes) -> Iterable[Dict[str, Any]]:
-    """Auto-detect ZIP vs GZIP vs plain NDJSON and iterate events."""
-    if not blob:
-        return
-    header = blob[:2]
-    if header == b"\x1f\x8b":  # gzip
-        yield from iterate_ndjson_from_gz_bytes(blob)
-        return
-    if header == b"PK":        # zip
-        yield from iterate_ndjson_from_zip_bytes(blob)
-        return
-    # Fallback: treat as plain NDJSON
-    for line in io.BytesIO(blob).read().decode("utf-8", "ignore").splitlines():
-        s = line.strip()
-        if not s:
-            continue
-        try:
-            yield json.loads(s)
-        except json.JSONDecodeError:
-            continue
 
 # ---------- Transform ----------
 def should_keep_event(evt: Dict[str, Any], allow: List[str], deny: List[str]) -> bool:
@@ -418,46 +326,23 @@ def transform_event(
         for new_key, rule in derived_to_apply.items():
             src = rule.get("from")
             val = _get_by_path(evt, src) if src else None
-
-            # 1) Optional mapping first (e.g., {"empty": False})
+            # 1) Optional mapping / operator-based mapping first
             mapped = False
             mapping = rule.get("map")
-            if isinstance(mapping, dict) and (val in mapping):
-                val = mapping.get(val)
-                mapped = True
-
-            # 2) Optional coercion (only if not explicitly mapped)
-            if not mapped:
-                coerce = rule.get("coerce")
-                if coerce:
-                    try:
-                        if coerce == "int":
-                            if val is None or (isinstance(val, str) and not val.strip()):
-                                raise ValueError("empty")
-                            # robust for "123" and 123.0
-                            val = int(float(val))
-                        elif coerce == "float":
-                            if val is None or (isinstance(val, str) and not val.strip()):
-                                raise ValueError("empty")
-                            val = float(val)
-                        elif coerce == "bool":
-                            if isinstance(val, str):
-                                val = val.strip().lower() in ("1", "true", "yes", "y")
-                            else:
-                                val = bool(val)
-                        elif coerce == "str":
-                            val = "" if val is None else str(val)
-                        # unknown coercions are ignored
-                    except Exception:
-                        if "default" in rule:
-                            val = rule.get("default")
-                        else:
-                            val = None
-
-            # 3) Default if still None and default provided
+            if isinstance(mapping, dict):
+                if val in mapping:
+                    val = mapping.get(val)
+                    mapped = True
+                elif "in" in mapping and isinstance(mapping["in"], (list, set, tuple)):
+                    if val in mapping["in"]:
+                        val = mapping.get("value", True)
+                        mapped = True
+                elif "not_in" in mapping and isinstance(mapping["not_in"], (list, set, tuple)):
+                    if val not in mapping["not_in"]:
+                        val = mapping.get("value", True)
+                        mapped = True
             if val is None and "default" in rule:
                 val = rule.get("default")
-
             # Write even if None (explicit null), to allow clearing
             props_out[new_key] = val
 
