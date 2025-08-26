@@ -183,16 +183,66 @@ def _get_by_path(evt: Dict[str, Any], path: Optional[str]):
     return cur
 
 def _match_conditions(evt: Dict[str, Any], conditions: Dict[str, Any]) -> bool:
-    """Return True if all dotted or top-level paths equal their expected values."""
+    """Return True if all dotted or top-level paths satisfy their expected values.
+    Supports either plain equality or operator dicts like:
+      {"not": X}, {"in": [..]}, {"not_in": [..]}, {"exists": True/False}, {"empty": True/False}
+    - For dotted paths (e.g. 'event_properties.foo'), values are resolved via _get_by_path.
+    - "empty" checks treat None, "", and [] as empty.
+    """
     if not isinstance(conditions, dict):
         return False
+
+    def _is_empty(v: Any) -> bool:
+        return v is None or v == "" or v == []
+
     for path, expected in conditions.items():
+        # Resolve value from event
         if isinstance(path, str) and "." in path:
             val = _get_by_path(evt, path)
         else:
             val = evt.get(path)
-        if val != expected:
-            return False
+
+        # Plain equality
+        if not isinstance(expected, dict):
+            if val != expected:
+                return False
+            continue
+
+        # Operator form
+        for op, cmp in expected.items():
+            try:
+                if op == "not":
+                    if val == cmp:
+                        return False
+                elif op == "in":
+                    if cmp is None:
+                        return False
+                    container = set(cmp) if not isinstance(cmp, set) else cmp
+                    if val not in container:
+                        return False
+                elif op == "not_in":
+                    if cmp is None:
+                        # nothing is disallowed -> always passes
+                        continue
+                    container = set(cmp) if not isinstance(cmp, set) else cmp
+                    if val in container:
+                        return False
+                elif op == "exists":
+                    want = bool(cmp)
+                    exists = val is not None
+                    if exists != want:
+                        return False
+                elif op == "empty":
+                    want_empty = bool(cmp)
+                    is_empty = _is_empty(val)
+                    if is_empty != want_empty:
+                        return False
+                else:
+                    # Unknown operator: fail safe by treating as mismatch
+                    return False
+            except Exception:
+                return False
+
     return True
 
 def transform_event(
