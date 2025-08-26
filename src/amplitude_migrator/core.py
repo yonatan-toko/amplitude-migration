@@ -329,6 +329,17 @@ def _match_conditions(evt: Dict[str, Any], conditions: Dict[str, Any]) -> bool:
                     is_empty = _is_empty(val)
                     if is_empty != want_empty:
                         return False
+                elif op == "range":
+                    # cmp expected to be [min, max]
+                    try:
+                        lo, hi = cmp
+                        if val is None:
+                            return False
+                        num = float(val)
+                        if num < lo or num > hi:
+                            return False
+                    except Exception:
+                        return False
                 else:
                     # Unknown operator: fail safe by treating as mismatch
                     return False
