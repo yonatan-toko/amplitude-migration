@@ -326,11 +326,46 @@ def transform_event(
         for new_key, rule in derived_to_apply.items():
             src = rule.get("from")
             val = _get_by_path(evt, src) if src else None
+
+            # 1) Optional mapping first (e.g., {"empty": False})
+            mapped = False
             mapping = rule.get("map")
             if isinstance(mapping, dict) and (val in mapping):
                 val = mapping.get(val)
+                mapped = True
+
+            # 2) Optional coercion (only if not explicitly mapped)
+            if not mapped:
+                coerce = rule.get("coerce")
+                if coerce:
+                    try:
+                        if coerce == "int":
+                            if val is None or (isinstance(val, str) and not val.strip()):
+                                raise ValueError("empty")
+                            # robust for "123" and 123.0
+                            val = int(float(val))
+                        elif coerce == "float":
+                            if val is None or (isinstance(val, str) and not val.strip()):
+                                raise ValueError("empty")
+                            val = float(val)
+                        elif coerce == "bool":
+                            if isinstance(val, str):
+                                val = val.strip().lower() in ("1", "true", "yes", "y")
+                            else:
+                                val = bool(val)
+                        elif coerce == "str":
+                            val = "" if val is None else str(val)
+                        # unknown coercions are ignored
+                    except Exception:
+                        if "default" in rule:
+                            val = rule.get("default")
+                        else:
+                            val = None
+
+            # 3) Default if still None and default provided
             if val is None and "default" in rule:
                 val = rule.get("default")
+
             # Write even if None (explicit null), to allow clearing
             props_out[new_key] = val
 
