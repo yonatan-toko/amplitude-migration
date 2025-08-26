@@ -6,6 +6,7 @@ from .time_utils import choose_time_ms, parse_iso_to_ms
 import csv
 from pathlib import Path
 from typing import Dict, Iterable, Literal, Optional
+import zipfile
 
 # Top-level fields we pass through from source events unchanged (if present)
 TOP_LEVEL_PASSTHROUGH: Set[str] = {
@@ -124,6 +125,42 @@ def iterate_ndjson_from_gz_bytes(gz_bytes: bytes) -> Iterable[Dict[str, Any]]:
         for raw in gz:
             line = raw.decode("utf-8", "ignore").strip()
             if not line: 
+                continue
+            try:
+                yield json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+# --- Helper: auto-detect and iterate NDJSON from bytes (ZIP/GZ/PLAIN) ---
+def iterate_ndjson_from_bytes(raw_bytes: bytes) -> Iterable[Dict[str, Any]]:
+    """Auto-detect and iterate events from raw export bytes.
+    Handles ZIP (with .json or .json.gz entries), GZIP (.json.gz), or plain NDJSON."""
+    # ZIP file? (starts with PK)
+    if raw_bytes[:2] == b"PK":
+        with zipfile.ZipFile(io.BytesIO(raw_bytes)) as zf:
+            for name in zf.namelist():
+                if name.endswith(".json.gz"):
+                    with zf.open(name) as member:
+                        for evt in iterate_ndjson_from_gz_bytes(member.read()):
+                            yield evt
+                elif name.endswith(".json"):
+                    with zf.open(name) as member:
+                        for line in io.TextIOWrapper(member, encoding="utf-8", errors="ignore"):
+                            line = line.strip()
+                            if not line:
+                                continue
+                            try:
+                                yield json.loads(line)
+                            except json.JSONDecodeError:
+                                continue
+    # GZIP file? (magic 1F 8B)
+    elif raw_bytes[:2] == b"\x1f\x8b":
+        yield from iterate_ndjson_from_gz_bytes(raw_bytes)
+    else:
+        # Assume plain NDJSON
+        for line in raw_bytes.decode("utf-8", "ignore").splitlines():
+            line = line.strip()
+            if not line:
                 continue
             try:
                 yield json.loads(line)
