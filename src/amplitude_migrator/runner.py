@@ -19,7 +19,7 @@ def _iter_source_events(cfg) -> Iterable[Dict[str, Any]]:
         cfg["SOURCE_REGION"], cfg["EXPORT_START"], cfg["EXPORT_END"]
     )
     if cfg.get("VERBOSE"): print(f"[export] bytes={len(gz):,}")
-    yield from core.iterate_ndjson_from_gz_bytes(gz)
+    yield from core.iterate_ndjson_from_any_bytes(gz)
 
 def _mtu_sets_add(user_ids: Set[str], device_ids: Set[str], evt: Dict[str, Any], exclude_null: bool):
     u = evt.get("user_id")

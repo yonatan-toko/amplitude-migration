@@ -178,6 +178,58 @@ def iterate_ndjson_from_gz_path(path: str) -> Iterable[Dict[str, Any]]:
             except json.JSONDecodeError:
                 continue
 
+def iterate_ndjson_from_zip_bytes(zip_bytes: bytes) -> Iterable[Dict[str, Any]]:
+    """Iterate all NDJSON events from a ZIP containing *.json.gz or *.json files."""
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        # Prefer *.json.gz entries first, then *.json
+        names = sorted(zf.namelist())
+        gz_names = [n for n in names if n.lower().endswith(".json.gz")]
+        json_names = [n for n in names if n.lower().endswith(".json")]
+        # Read gzipped JSON lines
+        for name in gz_names:
+            with zf.open(name, "r") as fp:
+                with gzip.GzipFile(fileobj=io.BytesIO(fp.read()), mode="rb") as gz:
+                    for raw in gz:
+                        line = raw.decode("utf-8", "ignore").strip()
+                        if not line:
+                            continue
+                        try:
+                            yield json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+        # Read plain JSON lines
+        for name in json_names:
+            with zf.open(name, "r") as fp:
+                for raw in fp:
+                    line = raw.decode("utf-8", "ignore").strip()
+                    if not line:
+                        continue
+                    try:
+                        yield json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+
+def iterate_ndjson_from_any_bytes(blob: bytes) -> Iterable[Dict[str, Any]]:
+    """Auto-detect ZIP vs GZIP vs plain NDJSON and iterate events."""
+    if not blob:
+        return
+    header = blob[:2]
+    if header == b"\x1f\x8b":  # gzip
+        yield from iterate_ndjson_from_gz_bytes(blob)
+        return
+    if header == b"PK":        # zip
+        yield from iterate_ndjson_from_zip_bytes(blob)
+        return
+    # Fallback: treat as plain NDJSON
+    for line in io.BytesIO(blob).read().decode("utf-8", "ignore").splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        try:
+            yield json.loads(s)
+        except json.JSONDecodeError:
+            continue
+
 # ---------- Transform ----------
 def should_keep_event(evt: Dict[str, Any], allow: List[str], deny: List[str]) -> bool:
     et = evt.get("event_type")
