@@ -408,6 +408,7 @@ def transform_event(
     derived_props: Optional[Dict[str, Any]] = None,
     rename_rules: Optional[List[Dict[str, Any]]] = None,
     time_window_ms: Optional[Tuple[int, int]] = None,
+    prop_deny_map: Optional[Dict[str, List[str]]] = None,
 ) -> Optional[Dict[str, Any]]:
     if not should_keep_event(evt, allow, deny):
         return None
@@ -558,6 +559,34 @@ def transform_event(
 
     if out_user_props is not None:
         new_evt["user_properties"] = out_user_props
+
+    # --- Apply property KEEP rules to both event_properties and user_properties ---
+    allowed_keys: List[str] = []
+    if isinstance(keep_map, dict):
+        if et in keep_map:
+            allowed_keys = keep_map.get(et) or []
+        elif "*" in keep_map:
+            allowed_keys = keep_map.get("*") or []
+    if allowed_keys and allowed_keys != ["*"]:
+        if isinstance(new_evt.get("event_properties"), dict):
+            new_evt["event_properties"] = {k: v for k, v in new_evt["event_properties"].items() if k in allowed_keys}
+        if isinstance(new_evt.get("user_properties"), dict):
+            new_evt["user_properties"] = {k: v for k, v in new_evt["user_properties"].items() if k in allowed_keys}
+
+    # --- Apply property DENY rules (drop keys) on both namespaces ---
+    deny_keys: List[str] = []
+    if isinstance(prop_deny_map, dict) and prop_deny_map:
+        if et in prop_deny_map:
+            deny_keys.extend(prop_deny_map.get(et) or [])
+        if "*" in prop_deny_map:
+            deny_keys.extend(prop_deny_map.get("*") or [])
+    if deny_keys:
+        if isinstance(new_evt.get("event_properties"), dict):
+            for k in deny_keys:
+                new_evt["event_properties"].pop(k, None)
+        if isinstance(new_evt.get("user_properties"), dict):
+            for k in deny_keys:
+                new_evt["user_properties"].pop(k, None)
 
     return new_evt
 

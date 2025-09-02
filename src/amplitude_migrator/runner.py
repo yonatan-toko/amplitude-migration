@@ -135,6 +135,7 @@ def run_migration(cfg: Dict[str, Any]) -> Dict[str, Any]:
             const_props=cfg.get("EVENT_CONST_PROPERTIES", {}),
             derived_props=cfg.get("EVENT_DERIVED_PROPERTIES", {}),
             time_window_ms=time_window_ms,
+            prop_deny_map=cfg.get("EVENT_PROPERTY_DENY", {}),
         )
         if new_evt is None:
             continue
