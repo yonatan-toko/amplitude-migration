@@ -366,6 +366,12 @@ def cmd_run(args: argparse.Namespace):
         # Default to the init-created reports dir for downstream components that honor the env var
         os.environ["MIGRATION_REPORTS_DIR"] = str(init_reports_dir)
 
+    # Optional minute-level window forwarded into settings for runner/core
+    if getattr(args, "start_min", None):
+        settings["START_MIN"] = args.start_min
+    if getattr(args, "end_min", None):
+        settings["END_MIN"] = args.end_min
+
     if args.dry_run:
         settings["DRY_RUN"] = True
     summary = run_migration(settings)
@@ -413,6 +419,8 @@ def cli():
     sp.add_argument("--config", required=True, help="Path to config.py")
     sp.add_argument("--dry-run", action="store_true", help="Force dry run")
     sp.add_argument("--reports-dir", help="Override reports directory for this run")
+    sp.add_argument("--start-min", dest="start_min", help="UTC minute start in YYYYMMDDTHHMM (inclusive)")
+    sp.add_argument("--end-min", dest="end_min", help="UTC minute end in YYYYMMDDTHHMM (exclusive)")
     sp.set_defaults(fn=cmd_run)
 
     sp = sub.add_parser("ui", help="Launch web dashboard")
