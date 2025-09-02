@@ -1,7 +1,7 @@
 import json, os, time
 from pathlib import Path
 from typing import Dict, Any, Iterable, List, Optional, Set
-
+from .core import export_hour_from_compact, parse_compact_minutes_to_ms
 from . import core
 from amplitude_migrator.core import load_id_map, apply_id_remap
 
@@ -12,11 +12,28 @@ def _iter_source_events(cfg) -> Iterable[Dict[str, Any]]:
         return
     if not (cfg.get("EXPORT_START") and cfg.get("EXPORT_END")):
         raise SystemExit("Set LOCAL_EXPORT_GZ_PATH or both EXPORT_START and EXPORT_END in config.")
+
+    # Derive hour-only export bounds; Export API rejects minute precision
+    export_start = cfg["EXPORT_START"]
+    export_end = cfg["EXPORT_END"]
+    start_min = cfg.get("START_MIN")
+    end_min = cfg.get("END_MIN")
+    if start_min or end_min:
+        start_hour = export_hour_from_compact(start_min) if start_min else export_start
+        end_hour = export_hour_from_compact(end_min) if end_min else export_end
+        if not start_hour or not end_hour:
+            raise SystemExit("START_MIN/END_MIN must be in YYYYMMDDTHHMM format")
+        export_start, export_end = start_hour, end_hour
+
     if cfg.get("VERBOSE"):
-        print(f"[export] {cfg['SOURCE_REGION']} {cfg['EXPORT_START']} → {cfg['EXPORT_END']}")
+        if start_min or end_min:
+            print(f"[export] {cfg['SOURCE_REGION']} {export_start} → {export_end}  (minute filter: {start_min or '—'} → {end_min or '—'})")
+        else:
+            print(f"[export] {cfg['SOURCE_REGION']} {export_start} → {export_end}")
+
     gz = core.stream_export_from_api(
         cfg["SOURCE_PROJECT_API_KEY"], cfg["SOURCE_PROJECT_SECRET_KEY"],
-        cfg["SOURCE_REGION"], cfg["EXPORT_START"], cfg["EXPORT_END"]
+        cfg["SOURCE_REGION"], export_start, export_end
     )
     if cfg.get("VERBOSE"): print(f"[export] bytes={len(gz):,}")
     yield from core.iterate_ndjson_from_any_bytes(gz)
@@ -42,6 +59,16 @@ def run_migration(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
     sample_limit = int(cfg.get("REPORT_SAMPLE_LIMIT", 20))
     sample_events: List[Dict[str, Any]] = []
+
+    # Optional minute-level filtering window (UTC) for transform_event
+    start_min = cfg.get("START_MIN")
+    end_min = cfg.get("END_MIN")
+    time_window_ms: Optional[tuple[int, int]] = None
+    if start_min and end_min:
+        ms_a = parse_compact_minutes_to_ms(start_min)
+        ms_b = parse_compact_minutes_to_ms(end_min)
+        if ms_a is not None and ms_b is not None:
+            time_window_ms = (ms_a, ms_b)
 
     # Caches of last known user_properties from the source stream
     last_user_props_by_user_id: Dict[str, Dict[str, Any]] = {}
@@ -107,6 +134,7 @@ def run_migration(cfg: Dict[str, Any]) -> Dict[str, Any]:
             fallback_user_properties=fallback_up,
             const_props=cfg.get("EVENT_CONST_PROPERTIES", {}),
             derived_props=cfg.get("EVENT_DERIVED_PROPERTIES", {}),
+            time_window_ms=time_window_ms,
         )
         if new_evt is None:
             continue
@@ -206,6 +234,8 @@ def run_migration(cfg: Dict[str, Any]) -> Dict[str, Any]:
             "export_start": cfg.get("EXPORT_START"),
             "export_end": cfg.get("EXPORT_END"),
             "local_export_path": cfg.get("LOCAL_EXPORT_GZ_PATH"),
+            "start_min": cfg.get("START_MIN"),
+            "end_min": cfg.get("END_MIN"),
         },
         "destination": {
             "region": cfg.get("DEST_REGION"),
