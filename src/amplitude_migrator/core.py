@@ -237,6 +237,46 @@ def iterate_ndjson_from_any_bytes(blob: bytes) -> Iterable[Dict[str, Any]]:
         except json.JSONDecodeError:
             continue
 
+#
+# ---------- Time helpers for minute-level windows ----------
+def _compact_to_iso_utc(s: str) -> Optional[str]:
+    """Convert 'YYYYMMDDTHHMM' to ISO8601 UTC 'YYYY-MM-DDTHH:MM:00Z'.
+    Returns None if format doesn't match exactly.
+    """
+    if not isinstance(s, str):
+        return None
+    # expected length 13, with a literal 'T' at position 8
+    if len(s) != 13 or s[8] != 'T':
+        return None
+    yyyy, mm, dd = s[0:4], s[4:6], s[6:8]
+    hh, mi = s[9:11], s[11:13]
+    # Basic sanity checks
+    if not (yyyy.isdigit() and mm.isdigit() and dd.isdigit() and hh.isdigit() and mi.isdigit()):
+        return None
+    return f"{yyyy}-{mm}-{dd}T{hh}:{mi}:00Z"
+
+def parse_compact_minutes_to_ms(s: Optional[str]) -> Optional[int]:
+    """Parse 'YYYYMMDDTHHMM' (UTC) to epoch milliseconds. Returns None on failure."""
+    if not s:
+        return None
+    iso = _compact_to_iso_utc(s)
+    if not iso:
+        return None
+    try:
+        # Reuse the existing ISO parser from time_utils
+        return parse_iso_to_ms(iso)
+    except Exception:
+        return None
+
+def export_hour_from_compact(s: Optional[str]) -> Optional[str]:
+    """Derive Amplitude export hour string ('YYYYMMDDTHH') from 'YYYYMMDDTHHMM'.
+    Returns None on failure.
+    """
+    if not s or not isinstance(s, str) or len(s) < 11:
+        return None
+    # Keep up to HH (index 10 exclusive -> 0..9 plus the 'H' at 10)
+    return s[0:11]
+
 # ---------- Transform ----------
 def should_keep_event(evt: Dict[str, Any], allow: List[str], deny: List[str]) -> bool:
     et = evt.get("event_type")
@@ -367,6 +407,7 @@ def transform_event(
     const_props: Optional[Dict[str, Any]] = None,
     derived_props: Optional[Dict[str, Any]] = None,
     rename_rules: Optional[List[Dict[str, Any]]] = None,
+    time_window_ms: Optional[Tuple[int, int]] = None,
 ) -> Optional[Dict[str, Any]]:
     if not should_keep_event(evt, allow, deny):
         return None
@@ -482,6 +523,16 @@ def transform_event(
 
     # Choose outbound event time according to strategy
     out_time_ms = choose_time_ms(evt, time_strategy)
+
+    # Optional minute-level time window filter (inclusive start, exclusive end)
+    if time_window_ms is not None:
+        try:
+            start_ms, end_ms = time_window_ms
+            if out_time_ms is None or out_time_ms < int(start_ms) or out_time_ms >= int(end_ms):
+                return None
+        except Exception:
+            # If the window is malformed, fail open (do not filter)
+            pass
 
     # Decide user_properties: prefer inline; else fallback snapshot if provided
     raw_user_props = evt.get("user_properties")
