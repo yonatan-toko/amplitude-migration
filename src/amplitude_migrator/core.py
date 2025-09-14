@@ -300,6 +300,7 @@ def filter_props_for_event(et: str, props: Dict[str, Any], keep_map: Dict[str, L
         out = {rmap.get(k, k): v for k, v in out.items()}
     return out
 
+
 def _get_by_path(evt: Dict[str, Any], path: Optional[str]):
     """Resolve dotted paths like 'event_properties.foo', 'user_properties.bar', or top-level 'device_id'.
     Returns None if not found or path is falsy.
@@ -317,6 +318,17 @@ def _get_by_path(evt: Dict[str, Any], path: Optional[str]):
         else:
             return None
     return cur
+
+# --- Helper: evaluate a simple expression string using `value` as the variable ---
+# Only arithmetic and comparisons on `value` are expected. Builtins are disabled.
+def _apply_expr(expr: Any, value: Any) -> Any:
+    try:
+        if not isinstance(expr, str):
+            return value
+        return eval(expr, {"__builtins__": {}}, {"value": value})
+    except Exception:
+        # On any failure, keep the original value
+        return value
 
 def _match_conditions(evt: Dict[str, Any], conditions: Dict[str, Any]) -> bool:
     """Return True if all dotted or top-level paths satisfy their expected values.
@@ -510,6 +522,12 @@ def transform_event(
                             val = rule.get("default")
                         else:
                             val = None
+
+            # 2.5) Optional expression (only if not mapped and val is not None)
+            if not mapped:
+                expr = rule.get("expr")
+                if expr is not None and val is not None:
+                    val = _apply_expr(expr, val)
 
             # 3) Default if still None and default provided
             if val is None and "default" in rule:
