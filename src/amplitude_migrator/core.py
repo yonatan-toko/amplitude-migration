@@ -569,19 +569,41 @@ def transform_event(
 
     # --- Always use the original timestamp from the source event ---
     # Prefer explicit "time" if present; otherwise prefer server_received or server_upload
-    # but NEVER fallback to now(). If no timestamp exists, drop the event.
-    orig_time = (
+    # but NEVER fallback to now(). If no usable timestamp exists, drop the event.
+    raw_time = (
         evt.get("time")
         or evt.get("server_received_time")
         or evt.get("server_upload_time")
     )
 
-    if orig_time is None:
+    if raw_time is None:
         # If the event has no real timestamp, we drop it instead of inserting "now"
         return None
 
-    out_time_ms = int(orig_time)
+    out_time_ms: Optional[int] = None
 
+    # 1) Numeric types: assume already milliseconds
+    if isinstance(raw_time, (int, float)):
+        out_time_ms = int(raw_time)
+    elif isinstance(raw_time, str):
+        s = raw_time.strip()
+        # 2) Pure digits: treat as milliseconds
+        if s.isdigit():
+            try:
+                out_time_ms = int(s)
+            except ValueError:
+                out_time_ms = None
+        else:
+            # 3) Fallback: try ISO-like parsing (e.g. '2025-09-14 18:55:09.149000')
+            try:
+                out_time_ms = parse_iso_to_ms(s)
+            except Exception:
+                out_time_ms = None
+
+    # If we still don't have a valid timestamp, drop the event rather than invent 'now'
+    if out_time_ms is None:
+        return None
+    
     # Optional minute-level time window filter (inclusive start, exclusive end)
     if time_window_ms is not None:
         try:
