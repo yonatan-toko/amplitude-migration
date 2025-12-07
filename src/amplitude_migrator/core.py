@@ -396,6 +396,28 @@ def _match_conditions(evt: Dict[str, Any], conditions: Dict[str, Any]) -> bool:
                             return False
                     except Exception:
                         return False
+                elif op == "contains":
+                    if val is None or cmp is None:
+                        return False
+                    s = str(val).lower()
+                    # cmp can be a single string or a list of strings
+                    if isinstance(cmp, (list, tuple, set)):
+                        if not any(str(word).lower() in s for word in cmp):
+                            return False
+                    else:
+                        if str(cmp).lower() not in s:
+                            return False
+                elif op == "not_contains":
+                    if val is None or cmp is None:
+                        # if there's no value, we treat it as "does not contain" and let it pass
+                        continue
+                    s = str(val).lower()
+                    if isinstance(cmp, (list, tuple, set)):
+                        if any(str(word).lower() in s for word in cmp):
+                            return False
+                    else:
+                        if str(cmp).lower() in s:
+                            return False
                 else:
                     # Unknown operator: fail safe by treating as mismatch
                     return False
