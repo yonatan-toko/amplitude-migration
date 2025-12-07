@@ -447,7 +447,8 @@ def transform_event(
     if not should_keep_event(evt, allow, deny):
         return None
 
-    et = rename_event_type(evt.get("event_type", ""), rename_map)
+    original_et = evt.get("event_type", "")
+    et = rename_event_type(original_et, rename_map)
 
     # Apply conditional rename rules (first match wins)
     if isinstance(rename_rules, list) and rename_rules:
@@ -461,6 +462,10 @@ def transform_event(
             except Exception:
                 # Ignore malformed rule and continue
                 continue
+
+    # Special case: for 100ms_session_duration_v1.3 we only want events that matched a rename rule
+    if original_et == "100ms_session_duration_v1.3" and et == original_et:
+        return None
 
     # Filter event_properties according to keep & rename rules
     props_in = evt.get("event_properties") or {}
