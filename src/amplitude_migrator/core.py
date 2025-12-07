@@ -567,8 +567,20 @@ def transform_event(
     user_id = force_user_id if force_user_id is not None else evt.get("user_id")
     device_id = force_device_id if force_device_id is not None else evt.get("device_id")
 
-    # Choose outbound event time according to strategy
-    out_time_ms = choose_time_ms(evt, time_strategy)
+    # --- Always use the original timestamp from the source event ---
+    # Prefer explicit "time" if present; otherwise prefer server_received or server_upload
+    # but NEVER fallback to now(). If no timestamp exists, drop the event.
+    orig_time = (
+        evt.get("time")
+        or evt.get("server_received_time")
+        or evt.get("server_upload_time")
+    )
+
+    if orig_time is None:
+        # If the event has no real timestamp, we drop it instead of inserting "now"
+        return None
+
+    out_time_ms = int(orig_time)
 
     # Optional minute-level time window filter (inclusive start, exclusive end)
     if time_window_ms is not None:
